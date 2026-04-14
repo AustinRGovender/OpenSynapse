@@ -1,0 +1,21 @@
+{
+  "name": "opensynapse",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "concurrently -n cp,web -c blue,green \"pnpm run dev:control-plane\" \"pnpm run dev:web\"",
+    "dev:web": "pnpm --filter web dev",
+    "dev:control-plane": "cd apps/control-plane && go run ./cmd/server",
+    "build": "pnpm run -r build",
+    "test": "pnpm run -r test",
+    "lint": "pnpm run -r lint",
+    "typecheck": "pnpm run -r typecheck"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

@@ -1,0 +1,6 @@
+packages:
+  - "apps/web"
+  - "apps/desktop"
+  - "packages/ui"
+  - "packages/plan-schema"
+  - "packages/api-client"

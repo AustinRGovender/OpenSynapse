@@ -1,0 +1,20 @@
+services:
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.control-plane
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+    ports:
+      - "8080:8080"
+    depends_on:
+      - control-plane
+    restart: unless-stopped

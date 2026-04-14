@@ -1,0 +1,10 @@
+{
+  "name": "desktop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'desktop: run cargo tauri dev from apps/desktop/src-tauri'",
+    "build": "echo 'desktop: run cargo tauri build from apps/desktop/src-tauri'"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@opensynapse/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "echo 'api-client: no build step yet'",
+    "generate": "echo 'api-client: openapi generation not configured yet'",
+    "test": "echo 'api-client: no tests yet'",
+    "lint": "echo 'api-client: no lint yet'"
+  }
+}

@@ -3,7 +3,7 @@
 | Phase | Description                              | Status      | Started | Completed | Notes |
 | ----- | ---------------------------------------- | ----------- | ------- | --------- | ----- |
 | -1    | Development environment setup            | complete    | 2026-04-14 | 2026-04-14 | All 11 validation checks pass |
-| 0     | Project scaffold                         | not started |         |           |       |
+| 0     | Project scaffold                         | complete    | 2026-04-14 | 2026-04-14 | All acceptance criteria verified |
 | 1     | Control plane core and data model        | not started |         |           |       |
 | 2     | Visual plan builder                      | not started |         |           |       |
 | 3     | Local execution engine                   | not started |         |           |       |
