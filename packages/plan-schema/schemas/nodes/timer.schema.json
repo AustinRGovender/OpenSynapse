@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/timer.schema.json",
+  "title": "Timer",
+  "description": "Inserts a sleep/delay after the parent sampler or controller. Supports constant, uniform random, and Gaussian distributions.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "timer",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this timer."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "timer_type": {
+      "type": "string",
+      "enum": ["constant", "uniform_random", "gaussian"],
+      "description": "Distribution type for the delay."
+    },
+    "duration_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Fixed delay in milliseconds (for constant timer type)."
+    },
+    "min_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Minimum delay in milliseconds (for uniform_random timer type)."
+    },
+    "max_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Maximum delay in milliseconds (for uniform_random timer type)."
+    },
+    "mean_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Mean delay in milliseconds (for gaussian timer type)."
+    },
+    "deviation_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Standard deviation in milliseconds (for gaussian timer type)."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 0,
+      "description": "Timers do not have children."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "timer_type", "children"],
+  "if": {
+    "properties": { "timer_type": { "const": "constant" } }
+  },
+  "then": {
+    "required": ["duration_ms"]
+  },
+  "else": {
+    "if": {
+      "properties": { "timer_type": { "const": "uniform_random" } }
+    },
+    "then": {
+      "required": ["min_ms", "max_ms"]
+    },
+    "else": {
+      "if": {
+        "properties": { "timer_type": { "const": "gaussian" } }
+      },
+      "then": {
+        "required": ["mean_ms", "deviation_ms"]
+      }
+    }
+  },
+  "additionalProperties": false
+}

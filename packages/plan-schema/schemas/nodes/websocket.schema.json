@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/websocket.schema.json",
+  "title": "WebSocket Request",
+  "description": "WebSocket sampler. Opens a connection, sends and receives messages, then disconnects.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "websocket",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this WebSocket request."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WebSocket URL (ws:// or wss://). Supports ${varName} interpolation."
+    },
+    "connect_timeout": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m)$",
+      "default": "60s",
+      "description": "Timeout for the initial connection handshake."
+    },
+    "headers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Header name."
+          },
+          "value": {
+            "type": "string",
+            "description": "Header value. Supports ${varName} interpolation."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this header is active."
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
+      "default": [],
+      "description": "HTTP headers sent during the WebSocket upgrade."
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text", "binary"],
+            "default": "text",
+            "description": "Message frame type."
+          },
+          "data": {
+            "type": "string",
+            "description": "Message payload. Supports ${varName} interpolation."
+          },
+          "delay_before": {
+            "type": "string",
+            "pattern": "^[0-9]+(ms|s|m)$",
+            "default": "0ms",
+            "description": "Think time before sending this message."
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "default": [],
+      "description": "Messages to send over the connection in order."
+    },
+    "expected_messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "match_type": {
+            "type": "string",
+            "enum": ["exact", "contains", "regex", "jsonpath"],
+            "default": "contains",
+            "description": "How to match the incoming message."
+          },
+          "value": {
+            "type": "string",
+            "description": "The value or pattern to match against."
+          },
+          "timeout": {
+            "type": "string",
+            "pattern": "^[0-9]+(ms|s|m)$",
+            "default": "30s",
+            "description": "How long to wait for this expected message."
+          }
+        },
+        "required": ["value"],
+        "additionalProperties": false
+      },
+      "default": [],
+      "description": "Messages expected to be received from the server."
+    },
+    "disconnect_behavior": {
+      "type": "string",
+      "enum": ["close_gracefully", "close_immediately", "keep_open"],
+      "default": "close_gracefully",
+      "description": "How to disconnect after sending all messages and receiving expected messages."
+    },
+    "close_timeout": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m)$",
+      "default": "5s",
+      "description": "Timeout for the close handshake when disconnecting gracefully."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes (assertions, timers)."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "url", "children"],
+  "additionalProperties": false
+}

@@ -4,7 +4,7 @@
 | ----- | ---------------------------------------- | ----------- | ------- | --------- | ----- |
 | -1    | Development environment setup            | complete    | 2026-04-14 | 2026-04-14 | All 11 validation checks pass |
 | 0     | Project scaffold                         | complete    | 2026-04-14 | 2026-04-14 | All acceptance criteria verified |
-| 1     | Control plane core and data model        | not started |         |           |       |
+| 1     | Control plane core and data model        | complete    | 2026-04-14 | 2026-04-14 | 11 tests pass, all CRUD verified |
 | 2     | Visual plan builder                      | not started |         |           |       |
 | 3     | Local execution engine                   | not started |         |           |       |
 | 4     | Live control                             | not started |         |           |       |

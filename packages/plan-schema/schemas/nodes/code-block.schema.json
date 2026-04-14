@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/code-block.schema.json",
+  "title": "Code Block",
+  "description": "A JavaScript snippet that runs in the k6 VU context. Used for anything the builder cannot express visually.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "code-block",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this code block."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "code": {
+      "type": "string",
+      "description": "JavaScript source code to execute in the k6 VU context. Has access to http, check, sleep, and other k6 APIs."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes (assertions, timers)."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "code", "children"],
+  "additionalProperties": false
+}

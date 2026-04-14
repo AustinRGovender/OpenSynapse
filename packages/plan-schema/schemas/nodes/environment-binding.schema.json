@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/environment-binding.schema.json",
+  "title": "Environment Binding",
+  "description": "A named reference to an Environment entity. Scopes environment variables to the plan.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "environment-binding",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this environment binding."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "environment_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Reference to the Environment entity that provides variables."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 0,
+      "description": "Environment bindings do not have children."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "environment_id", "children"],
+  "additionalProperties": false
+}

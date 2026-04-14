@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/else-controller.schema.json",
+  "title": "Else Controller",
+  "description": "Else branch for an If controller. Must be a sibling immediately after an If controller. Children run if the preceding If controller's condition was false.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "else-controller",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this controller."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes that execute when the preceding If controller's condition was false."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "children"],
+  "additionalProperties": false
+}

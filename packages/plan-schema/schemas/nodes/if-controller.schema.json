@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/if-controller.schema.json",
+  "title": "If Controller",
+  "description": "Conditional controller. Children run only if the condition evaluates to true. The condition is a JavaScript expression evaluated against the previous response and shared state.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "if-controller",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this controller."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "condition": {
+      "type": "string",
+      "minLength": 1,
+      "description": "JavaScript expression that evaluates to a boolean. Has access to the previous response and shared state variables."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes that execute when the condition is true."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "condition", "children"],
+  "additionalProperties": false
+}

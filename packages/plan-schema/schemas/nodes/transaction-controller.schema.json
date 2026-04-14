@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/transaction-controller.schema.json",
+  "title": "Transaction Controller",
+  "description": "Groups children and reports aggregated metrics. Translates to a k6 group().",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "transaction-controller",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this transaction group. Used as the k6 group name in metrics."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes whose metrics are aggregated under this transaction."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "children"],
+  "additionalProperties": false
+}

@@ -7,13 +7,30 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New() http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /ready", handlers.Ready)
 	mux.HandleFunc("GET /version", handlers.Version)
+
+	// Plans API (section 2.1 of data model doc)
+	mux.HandleFunc("GET /api/v1/plans", plans.List)
+	mux.HandleFunc("POST /api/v1/plans", plans.Create)
+	mux.HandleFunc("GET /api/v1/plans/{id}", plans.Get)
+	mux.HandleFunc("PUT /api/v1/plans/{id}", plans.Update)
+	mux.HandleFunc("DELETE /api/v1/plans/{id}", plans.Delete)
+	mux.HandleFunc("GET /api/v1/plans/{id}/versions", plans.ListVersions)
+	mux.HandleFunc("GET /api/v1/plans/{id}/versions/{version}", plans.GetVersion)
+	mux.HandleFunc("POST /api/v1/plans/{id}/validate", plans.Validate)
+
+	// Environments API (section 2.2 of data model doc)
+	mux.HandleFunc("GET /api/v1/environments", envs.List)
+	mux.HandleFunc("POST /api/v1/environments", envs.Create)
+	mux.HandleFunc("GET /api/v1/environments/{id}", envs.Get)
+	mux.HandleFunc("PUT /api/v1/environments/{id}", envs.Update)
+	mux.HandleFunc("DELETE /api/v1/environments/{id}", envs.Delete)
 
 	// CORS middleware for development
 	return corsMiddleware(mux)

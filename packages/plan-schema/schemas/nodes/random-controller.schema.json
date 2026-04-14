@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/random-controller.schema.json",
+  "title": "Random Controller",
+  "description": "Picks one child at random per iteration. Weights are optional per child.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "random-controller",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this controller."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "weights": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Relative weight for the corresponding child at the same index."
+      },
+      "description": "Optional array of weights, one per child. If omitted, all children have equal probability. Must have the same length as children when provided."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes; one is selected at random per iteration."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "children"],
+  "additionalProperties": false
+}

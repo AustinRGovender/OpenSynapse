@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/data-source.schema.json",
+  "title": "Data Source",
+  "description": "Provides test data from a CSV file, JSON file, or inline array. Rows are distributed across VUs using k6 SharedArray semantics.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "data-source",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this data source."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["csv", "json", "inline"],
+      "description": "The type of data source."
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "File path for csv and json source types. Relative to the plan or absolute."
+    },
+    "data": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "description": "Inline data array for the inline source type. Each element is a row of key-value pairs."
+    },
+    "delimiter": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1,
+      "default": ",",
+      "description": "Column delimiter for CSV files."
+    },
+    "sharing": {
+      "type": "string",
+      "enum": ["shared", "per-vu", "sequential", "random"],
+      "default": "shared",
+      "description": "How rows are distributed across VUs. 'shared' uses k6 SharedArray. 'per-vu' gives each VU its own copy. 'sequential' advances one row per iteration. 'random' picks a random row each iteration."
+    },
+    "variable_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The variable name used to reference this data in ${varName} interpolation."
+    },
+    "first_row_is_header": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the first row of a CSV file contains column headers."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 0,
+      "description": "Data sources do not have children."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "source_type", "variable_name", "children"],
+  "if": {
+    "properties": { "source_type": { "const": "inline" } }
+  },
+  "then": {
+    "required": ["data"]
+  },
+  "else": {
+    "required": ["path"]
+  },
+  "additionalProperties": false
+}

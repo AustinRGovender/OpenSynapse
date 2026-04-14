@@ -1,0 +1,382 @@
+openapi: "3.0.3"
+info:
+  title: OpenSynapse API
+  version: "0.1.0"
+  description: Self-hosted performance testing platform API
+servers:
+  - url: /api/v1
+    description: API v1
+
+paths:
+  /plans:
+    get:
+      operationId: listPlans
+      summary: List plans
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 500 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of plans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Plan" }
+                  next_cursor:
+                    type: string
+    post:
+      operationId: createPlan
+      summary: Create plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePlanRequest" }
+      responses:
+        "201":
+          description: Created plan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /plans/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getPlan
+      summary: Get plan
+      responses:
+        "200":
+          description: Plan details
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        "404":
+          description: Plan not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    put:
+      operationId: updatePlan
+      summary: Update plan (full replacement)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePlanRequest" }
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        "404":
+          description: Plan not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: deletePlan
+      summary: Delete plan
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Plan not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /plans/{id}/versions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listPlanVersions
+      summary: List version history
+      responses:
+        "200":
+          description: Version list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PlanVersion" }
+
+  /plans/{id}/versions/{version}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: version
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getPlanVersion
+      summary: Get a historical version
+      responses:
+        "200":
+          description: Plan version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanVersion" }
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /plans/{id}/validate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: validatePlan
+      summary: Validate plan without saving
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                root: { $ref: "#/components/schemas/Node" }
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  errors:
+                    type: array
+                    items: { type: string }
+
+  /environments:
+    get:
+      operationId: listEnvironments
+      summary: List environments
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 500 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of environments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Environment" }
+                  next_cursor:
+                    type: string
+    post:
+      operationId: createEnvironment
+      summary: Create environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEnvironmentRequest" }
+      responses:
+        "201":
+          description: Created environment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+
+  /environments/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getEnvironment
+      summary: Get environment
+      responses:
+        "200":
+          description: Environment details
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    put:
+      operationId: updateEnvironment
+      summary: Update environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateEnvironmentRequest" }
+      responses:
+        "200":
+          description: Updated environment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: deleteEnvironment
+      summary: Delete environment
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+components:
+  schemas:
+    Node:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        properties: { type: object }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/Node" }
+
+    Plan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer }
+        default_environment_id: { type: string, format: uuid, nullable: true }
+        root: { $ref: "#/components/schemas/Node" }
+
+    PlanVersion:
+      type: object
+      properties:
+        id: { type: string }
+        plan_id: { type: string }
+        version: { type: integer }
+        root: { $ref: "#/components/schemas/Node" }
+        name: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+
+    CreatePlanRequest:
+      type: object
+      required: [name, root]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        default_environment_id: { type: string, nullable: true }
+        root: { $ref: "#/components/schemas/Node" }
+
+    UpdatePlanRequest:
+      type: object
+      required: [name, root]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        default_environment_id: { type: string, nullable: true }
+        root: { $ref: "#/components/schemas/Node" }
+
+    Variable:
+      type: object
+      properties:
+        value: { type: string }
+        secret: { type: boolean }
+
+    Environment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        variables:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Variable" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateEnvironmentRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        variables:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Variable" }
+
+    UpdateEnvironmentRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        variables:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Variable" }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }

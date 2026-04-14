@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/plan.schema.json",
+  "title": "Plan",
+  "description": "Root node of a test plan. Contains metadata and a default environment reference.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "plan",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of the test plan."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000,
+      "default": "",
+      "description": "Optional longer description of what this plan tests."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Tags for categorisation and filtering."
+    },
+    "default_environment_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Reference to the default Environment entity used when none is specified at a lower scope."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes (scenarios, data sources, environment bindings)."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "children"],
+  "additionalProperties": false
+}

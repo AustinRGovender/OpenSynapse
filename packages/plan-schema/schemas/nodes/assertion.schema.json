@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/assertion.schema.json",
+  "title": "Assertion",
+  "description": "Checks a condition on the response. Attached to a sampler or controller. Can check status code, body content, headers, or response time.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "assertion",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this assertion."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "target": {
+      "type": "string",
+      "enum": ["status", "body", "header", "response_time"],
+      "description": "What part of the response to assert against."
+    },
+    "header_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The specific header name to check when target is 'header'."
+    },
+    "condition": {
+      "type": "string",
+      "enum": [
+        "equals",
+        "contains",
+        "matches",
+        "jsonpath",
+        "xpath",
+        "less_than",
+        "greater_than",
+        "exists"
+      ],
+      "description": "The type of comparison to perform."
+    },
+    "value": {
+      "type": ["string", "number"],
+      "description": "The expected value. For 'matches', a regex pattern. For 'jsonpath'/'xpath', the expression. For 'less_than'/'greater_than', a numeric threshold. Supports ${varName} interpolation for string values."
+    },
+    "negate": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, the assertion passes when the condition does NOT match."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 0,
+      "description": "Assertions do not have children."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "target", "condition", "value", "children"],
+  "additionalProperties": false
+}

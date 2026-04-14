@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/scenario.schema.json",
+  "title": "Scenario",
+  "description": "Defines an executor and its parameters. Children run under that executor. Multiple scenarios can coexist in one plan and run in parallel.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "scenario",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this scenario."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "executor": {
+      "type": "string",
+      "enum": [
+        "ramping-vus",
+        "constant-vus",
+        "constant-arrival-rate",
+        "ramping-arrival-rate",
+        "shared-iterations",
+        "per-vu-iterations",
+        "externally-controlled"
+      ],
+      "description": "The k6 executor type for this scenario."
+    },
+    "vus": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of virtual users (for constant-vus, per-vu-iterations, externally-controlled)."
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "description": "Duration of the scenario (e.g. '30s', '10m', '1h')."
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of iterations (for shared-iterations, per-vu-iterations)."
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "string",
+            "pattern": "^[0-9]+(ms|s|m|h)$",
+            "description": "Duration of this stage."
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Target VU count or rate at the end of this stage."
+          }
+        },
+        "required": ["duration", "target"],
+        "additionalProperties": false
+      },
+      "description": "Stages for ramping executors (ramping-vus, ramping-arrival-rate)."
+    },
+    "rate": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Iterations per time_unit (for constant-arrival-rate)."
+    },
+    "time_unit": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "default": "1s",
+      "description": "Time unit for arrival rate executors (e.g. '1s', '1m')."
+    },
+    "pre_allocated_vus": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Pre-allocated VU pool for arrival-rate executors."
+    },
+    "max_vus": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum VUs allowed (for externally-controlled and arrival-rate executors)."
+    },
+    "graceful_stop": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "default": "30s",
+      "description": "Time to wait for in-flight iterations to finish after the scenario ends."
+    },
+    "exec": {
+      "type": "string",
+      "description": "Name of the exported JS function to run (advanced; defaults to 'default')."
+    },
+    "start_time": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "description": "Delay before this scenario starts (for staggering parallel scenarios)."
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Custom tags applied to all metrics from this scenario."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes (samplers, controllers, timers, assertions, data sources)."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "executor", "children"],
+  "additionalProperties": false
+}

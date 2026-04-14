@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/loop-controller.schema.json",
+  "title": "Loop Controller",
+  "description": "Repeats children a fixed number of times or while a condition holds. Exactly one of count or while_condition must be provided.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "loop-controller",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this controller."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Fixed number of iterations. Mutually exclusive with while_condition."
+    },
+    "while_condition": {
+      "type": "string",
+      "minLength": 1,
+      "description": "JavaScript expression evaluated before each iteration. Loop continues while it returns true. Mutually exclusive with count."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes that execute on each iteration."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "children"],
+  "oneOf": [
+    { "required": ["count"] },
+    { "required": ["while_condition"] }
+  ],
+  "additionalProperties": false
+}

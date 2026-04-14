@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensynapse.dev/schemas/nodes/http.schema.json",
+  "title": "HTTP Request",
+  "description": "HTTP request sampler. URL and body support variable interpolation with ${varName} syntax.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this node."
+    },
+    "type": {
+      "const": "http",
+      "description": "Node type discriminator."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of this request."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this node is enabled."
+    },
+    "method": {
+      "type": "string",
+      "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+      "description": "HTTP method."
+    },
+    "url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Request URL. Supports ${varName} interpolation."
+    },
+    "headers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Header name."
+          },
+          "value": {
+            "type": "string",
+            "description": "Header value. Supports ${varName} interpolation."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this header is active."
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
+      "default": [],
+      "description": "HTTP headers to include in the request."
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["none", "raw", "form", "multipart", "json", "file"],
+          "description": "Body encoding type."
+        },
+        "content": {
+          "type": "string",
+          "description": "Body content for raw, json, and file types. For file type, this is the file path. Supports ${varName} interpolation."
+        },
+        "form_fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Field name."
+              },
+              "value": {
+                "type": "string",
+                "description": "Field value. Supports ${varName} interpolation."
+              },
+              "type": {
+                "type": "string",
+                "enum": ["text", "file"],
+                "default": "text",
+                "description": "Whether this field is text or a file upload."
+              }
+            },
+            "required": ["key", "value"],
+            "additionalProperties": false
+          },
+          "description": "Fields for form and multipart body types."
+        },
+        "content_type": {
+          "type": "string",
+          "description": "Explicit Content-Type override (e.g. 'application/xml'). Normally inferred from body type."
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false,
+      "description": "Request body configuration."
+    },
+    "timeout": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m)$",
+      "default": "60s",
+      "description": "Request timeout (e.g. '30s', '5000ms')."
+    },
+    "follow_redirects": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to follow HTTP redirects."
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Custom metric tags for this request."
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Child nodes (assertions, timers, extractors)."
+    }
+  },
+  "required": ["id", "type", "name", "enabled", "method", "url", "body", "children"],
+  "additionalProperties": false
+}
