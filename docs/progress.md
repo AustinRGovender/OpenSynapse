@@ -5,7 +5,7 @@
 | -1    | Development environment setup            | complete    | 2026-04-14 | 2026-04-14 | All 11 validation checks pass |
 | 0     | Project scaffold                         | complete    | 2026-04-14 | 2026-04-14 | All acceptance criteria verified |
 | 1     | Control plane core and data model        | complete    | 2026-04-14 | 2026-04-14 | 11 tests pass, all CRUD verified |
-| 2     | Visual plan builder                      | not started |         |           |       |
+| 2     | Visual plan builder                      | complete    | 2026-04-14 | 2026-04-14 | 31 tests pass, builder + compiler working |
 | 3     | Local execution engine                   | not started |         |           |       |
 | 4     | Live control                             | not started |         |           |       |
 | 5     | Reports, history, and comparison         | not started |         |           |       |

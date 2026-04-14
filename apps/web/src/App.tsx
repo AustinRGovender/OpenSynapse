@@ -1,9 +1,38 @@
 import { useEffect, useState } from 'react'
 import { OpenSynapseClient, type Plan } from '@opensynapse/api-client'
+import { PlanBuilder } from './components/plan-builder/PlanBuilder'
 
 const client = new OpenSynapseClient('/api/v1')
 
+function useHash() {
+  const [hash, setHash] = useState(window.location.hash)
+  useEffect(() => {
+    const handler = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', handler)
+    return () => window.removeEventListener('hashchange', handler)
+  }, [])
+  return hash
+}
+
 function App() {
+  const hash = useHash()
+
+  // Route: #/plans/:id → builder
+  const planMatch = hash.match(/^#\/plans\/(.+)$/)
+  if (planMatch) {
+    return (
+      <PlanBuilder
+        planId={planMatch[1]}
+        onBack={() => (window.location.hash = '')}
+      />
+    )
+  }
+
+  // Default: plans list
+  return <PlansListPage />
+}
+
+function PlansListPage() {
   const [health, setHealth] = useState<string>('checking...')
   const [plans, setPlans] = useState<Plan[]>([])
   const [newPlanName, setNewPlanName] = useState('')
@@ -13,7 +42,6 @@ function App() {
       .health()
       .then((data) => setHealth(data.status))
       .catch(() => setHealth('unreachable'))
-
     loadPlans()
   }, [])
 
@@ -28,7 +56,7 @@ function App() {
 
   async function createPlan() {
     if (!newPlanName.trim()) return
-    await client.createPlan({
+    const plan = await client.createPlan({
       name: newPlanName,
       description: '',
       tags: [],
@@ -42,7 +70,7 @@ function App() {
       },
     })
     setNewPlanName('')
-    loadPlans()
+    window.location.hash = `#/plans/${plan.id}`
   }
 
   async function deletePlan(id: string) {
@@ -52,7 +80,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Header */}
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
         <h1 className="text-xl font-semibold tracking-tight">OpenSynapse</h1>
         <span className="rounded bg-slate-900 px-3 py-1 font-mono text-xs text-teal-400">
@@ -60,9 +87,7 @@ function App() {
         </span>
       </header>
 
-      {/* Main content */}
       <main className="mx-auto max-w-3xl px-6 py-8">
-        {/* Create plan */}
         <div className="flex gap-3">
           <input
             type="text"
@@ -80,26 +105,28 @@ function App() {
           </button>
         </div>
 
-        {/* Plans list */}
         <div className="mt-6 space-y-2">
           {plans.length === 0 && (
-            <p className="text-sm text-slate-500">
-              No plans yet. Create one above.
-            </p>
+            <p className="text-sm text-slate-500">No plans yet. Create one above.</p>
           )}
           {plans.map((plan) => (
             <div
               key={plan.id}
-              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-4 py-3"
+              className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700"
+              onClick={() => (window.location.hash = `#/plans/${plan.id}`)}
             >
               <div>
                 <p className="text-sm font-medium">{plan.name}</p>
                 <p className="text-xs text-slate-500">
-                  v{plan.version} &middot; {new Date(plan.created_at).toLocaleDateString()}
+                  v{plan.version} &middot;{' '}
+                  {new Date(plan.created_at).toLocaleDateString()}
                 </p>
               </div>
               <button
-                onClick={() => deletePlan(plan.id)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deletePlan(plan.id)
+                }}
                 className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-red-400"
               >
                 Delete

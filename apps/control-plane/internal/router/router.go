@@ -24,6 +24,7 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers) http.
 	mux.HandleFunc("GET /api/v1/plans/{id}/versions", plans.ListVersions)
 	mux.HandleFunc("GET /api/v1/plans/{id}/versions/{version}", plans.GetVersion)
 	mux.HandleFunc("POST /api/v1/plans/{id}/validate", plans.Validate)
+	mux.HandleFunc("POST /api/v1/plans/{id}/compile", plans.Compile)
 
 	// Environments API (section 2.2 of data model doc)
 	mux.HandleFunc("GET /api/v1/environments", envs.List)
