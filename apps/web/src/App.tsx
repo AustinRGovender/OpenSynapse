@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { OpenSynapseClient, type Plan } from '@opensynapse/api-client'
 import { PlanBuilder } from './components/plan-builder/PlanBuilder'
+import { RunView } from './components/run-view/RunView'
+import type { Run } from './stores/run-store'
 
 const client = new OpenSynapseClient('/api/v1')
 
@@ -16,6 +18,12 @@ function useHash() {
 
 function App() {
   const hash = useHash()
+
+  // Route: #/runs/:id → run view
+  const runMatch = hash.match(/^#\/runs\/(.+)$/)
+  if (runMatch) {
+    return <RunView runId={runMatch[1]} onBack={() => (window.location.hash = '')} />
+  }
 
   // Route: #/plans/:id → builder
   const planMatch = hash.match(/^#\/plans\/(.+)$/)
@@ -35,6 +43,7 @@ function App() {
 function PlansListPage() {
   const [health, setHealth] = useState<string>('checking...')
   const [plans, setPlans] = useState<Plan[]>([])
+  const [runs, setRuns] = useState<Run[]>([])
   const [newPlanName, setNewPlanName] = useState('')
 
   useEffect(() => {
@@ -43,12 +52,25 @@ function PlansListPage() {
       .then((data) => setHealth(data.status))
       .catch(() => setHealth('unreachable'))
     loadPlans()
+    loadRuns()
   }, [])
 
   async function loadPlans() {
     try {
       const result = await client.listPlans()
       setPlans(result.items)
+    } catch {
+      // API may not be available yet
+    }
+  }
+
+  async function loadRuns() {
+    try {
+      const res = await fetch('/api/v1/runs?limit=10')
+      if (res.ok) {
+        const data = await res.json()
+        setRuns(data.items ?? [])
+      }
     } catch {
       // API may not be available yet
     }
@@ -133,6 +155,47 @@ function PlansListPage() {
               </button>
             </div>
           ))}
+        </div>
+
+        {/* Recent Runs */}
+        <div className="mt-10">
+          <h2 className="mb-3 text-sm font-semibold text-slate-300">Recent Runs</h2>
+          <div className="space-y-2">
+            {runs.length === 0 && (
+              <p className="text-sm text-slate-500">No runs yet. Open a plan and click Run.</p>
+            )}
+            {runs.map((run) => {
+              const statusColors: Record<string, string> = {
+                pending: 'bg-yellow-500/20 text-yellow-400',
+                running: 'bg-teal-500/20 text-teal-400',
+                completed: 'bg-green-500/20 text-green-400',
+                failed: 'bg-red-500/20 text-red-400',
+                cancelled: 'bg-slate-500/20 text-slate-400',
+              }
+              const badge = statusColors[run.status] || 'bg-slate-500/20 text-slate-400'
+              return (
+                <div
+                  key={run.id}
+                  className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700"
+                  onClick={() => (window.location.hash = `#/runs/${run.id}`)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge}`}>
+                      {run.status}
+                    </span>
+                    <span className="font-mono text-sm text-slate-300">
+                      {run.id.slice(0, 8)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    {run.started_at
+                      ? new Date(run.started_at).toLocaleString()
+                      : 'Not started'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </main>
     </div>

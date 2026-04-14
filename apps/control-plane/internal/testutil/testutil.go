@@ -9,6 +9,7 @@ import (
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/handlers"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/router"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/wsserver"
 )
 
 // NewTestDB creates an in-memory SQLite database with migrations applied.
@@ -27,6 +28,7 @@ type TestServer struct {
 	Server *httptest.Server
 	Plans  *db.PlanStore
 	Envs   *db.EnvironmentStore
+	Runs   *db.RunStore
 }
 
 // NewTestServer creates a test server with an in-memory database.
@@ -36,11 +38,15 @@ func NewTestServer(t *testing.T) *TestServer {
 
 	planStore := db.NewPlanStore(database)
 	envStore := db.NewEnvironmentStore(database)
+	runStore := db.NewRunStore(database)
 
 	planHandlers := handlers.NewPlanHandlers(planStore)
 	envHandlers := handlers.NewEnvironmentHandlers(envStore)
+	// Runs without engine (no k6 in tests)
+	runHandlers := handlers.NewRunHandlers(runStore, planStore, nil, nil)
+	ws := wsserver.New()
 
-	r := router.New(planHandlers, envHandlers)
+	r := router.New(planHandlers, envHandlers, runHandlers, ws)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
@@ -48,6 +54,7 @@ func NewTestServer(t *testing.T) *TestServer {
 		Server: srv,
 		Plans:  planStore,
 		Envs:   envStore,
+		Runs:   runStore,
 	}
 }
 

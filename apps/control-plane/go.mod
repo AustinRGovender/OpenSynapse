@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/google/uuid v1.6.0
 	modernc.org/sqlite v1.48.2
+	nhooyr.io/websocket v1.8.17
 )
 
 require (

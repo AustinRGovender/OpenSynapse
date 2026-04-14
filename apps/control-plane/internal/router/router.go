@@ -4,10 +4,11 @@ import (
 	"net/http"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/handlers"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/wsserver"
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -15,7 +16,7 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers) http.
 	mux.HandleFunc("GET /ready", handlers.Ready)
 	mux.HandleFunc("GET /version", handlers.Version)
 
-	// Plans API (section 2.1 of data model doc)
+	// Plans API (section 2.1)
 	mux.HandleFunc("GET /api/v1/plans", plans.List)
 	mux.HandleFunc("POST /api/v1/plans", plans.Create)
 	mux.HandleFunc("GET /api/v1/plans/{id}", plans.Get)
@@ -26,14 +27,28 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers) http.
 	mux.HandleFunc("POST /api/v1/plans/{id}/validate", plans.Validate)
 	mux.HandleFunc("POST /api/v1/plans/{id}/compile", plans.Compile)
 
-	// Environments API (section 2.2 of data model doc)
+	// Environments API (section 2.2)
 	mux.HandleFunc("GET /api/v1/environments", envs.List)
 	mux.HandleFunc("POST /api/v1/environments", envs.Create)
 	mux.HandleFunc("GET /api/v1/environments/{id}", envs.Get)
 	mux.HandleFunc("PUT /api/v1/environments/{id}", envs.Update)
 	mux.HandleFunc("DELETE /api/v1/environments/{id}", envs.Delete)
 
-	// CORS middleware for development
+	// Runs API (section 2.3)
+	mux.HandleFunc("GET /api/v1/runs", runs.List)
+	mux.HandleFunc("POST /api/v1/runs", runs.Start)
+	mux.HandleFunc("GET /api/v1/runs/{id}", runs.Get)
+	mux.HandleFunc("DELETE /api/v1/runs/{id}", runs.Delete)
+	mux.HandleFunc("GET /api/v1/runs/{id}/events", runs.ListEvents)
+	mux.HandleFunc("POST /api/v1/runs/{id}/events", runs.AddEvent)
+	mux.HandleFunc("POST /api/v1/runs/{id}/stop", runs.Stop)
+	mux.HandleFunc("POST /api/v1/runs/{id}/kill", runs.Kill)
+
+	// WebSocket
+	if ws != nil {
+		mux.HandleFunc("/api/v1/ws", ws.HandleWS)
+	}
+
 	return corsMiddleware(mux)
 }
 

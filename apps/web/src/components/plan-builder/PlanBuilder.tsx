@@ -4,6 +4,8 @@ import { NodeTree } from './NodeTree'
 import { FlowCanvas } from './FlowCanvas'
 import { PropertyPanel } from './PropertyPanel'
 
+type RunStatus = 'idle' | 'starting' | 'error'
+
 interface PlanBuilderProps {
   planId: string
   onBack: () => void
@@ -15,6 +17,29 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
   const [showScript, setShowScript] = useState(false)
   const [script, setScript] = useState<string | null>(null)
   const [scriptLoading, setScriptLoading] = useState(false)
+  const [runStatus, setRunStatus] = useState<RunStatus>('idle')
+
+  const handleStartRun = useCallback(async () => {
+    if (!plan) return
+    setRunStatus('starting')
+    try {
+      const res = await fetch('/api/v1/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_id: plan.id }),
+      })
+      if (res.ok) {
+        const run = await res.json()
+        window.location.hash = `#/runs/${run.id}`
+      } else {
+        setRunStatus('error')
+        setTimeout(() => setRunStatus('idle'), 3000)
+      }
+    } catch {
+      setRunStatus('error')
+      setTimeout(() => setRunStatus('idle'), 3000)
+    }
+  }, [plan])
 
   useEffect(() => {
     loadPlan(planId)
@@ -112,6 +137,23 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
             className="rounded bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700"
           >
             Show Script
+          </button>
+          <button
+            onClick={handleStartRun}
+            disabled={runStatus === 'starting'}
+            className={`rounded px-3 py-1 text-xs font-medium text-white ${
+              runStatus === 'error'
+                ? 'bg-red-600 hover:bg-red-500'
+                : runStatus === 'starting'
+                  ? 'bg-teal-700 opacity-70'
+                  : 'bg-teal-600 hover:bg-teal-500'
+            }`}
+          >
+            {runStatus === 'starting'
+              ? 'Starting...'
+              : runStatus === 'error'
+                ? 'Failed'
+                : 'Run'}
           </button>
         </div>
       </div>

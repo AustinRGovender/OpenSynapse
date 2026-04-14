@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/engine"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/handlers"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/router"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/wsserver"
 )
 
 func main() {
@@ -35,16 +37,35 @@ func main() {
 	}
 	defer database.Close()
 
+	// Stores
 	planStore := db.NewPlanStore(database)
 	envStore := db.NewEnvironmentStore(database)
+	runStore := db.NewRunStore(database)
 
+	// Engine
+	eng, err := engine.New()
+	if err != nil {
+		log.Printf("WARNING: k6 engine not available: %v", err)
+		log.Printf("Run execution will be disabled. Install k6 to enable.")
+	}
+
+	// WebSocket server
+	ws := wsserver.New()
+
+	// Handlers
 	planHandlers := handlers.NewPlanHandlers(planStore)
 	envHandlers := handlers.NewEnvironmentHandlers(envStore)
+	runHandlers := handlers.NewRunHandlers(runStore, planStore, eng, ws)
 
-	r := router.New(planHandlers, envHandlers)
+	r := router.New(planHandlers, envHandlers, runHandlers, ws)
 
 	fmt.Printf("OpenSynapse control plane listening on :%s\n", port)
 	fmt.Printf("Database: %s\n", dbPath)
+	if eng != nil {
+		fmt.Println("k6 engine: ready")
+	}
+	fmt.Printf("WebSocket: ws://localhost:%s/api/v1/ws\n", port)
+
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
