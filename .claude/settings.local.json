@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x scripts/dev/hooks/*.sh)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/austi/OneDrive/Desktop/dev/opensynapse/**)",
+      "Bash(done)",
+      "Bash(mkdir -p packages/ui/src/components)",
+      "Bash(echo 'const color = \"\"#ff0000\"\";')",
+      "Bash(bash scripts/dev/hooks/check-hex-colours.sh \"packages/ui/src/components/test-hex.tsx\")",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(rm packages/ui/src/components/test-hex.tsx)",
+      "Bash(pnpm test:*)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(go test:*)"
+    ]
+  }
+}

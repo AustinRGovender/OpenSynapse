@@ -1,0 +1,30 @@
+# Normalize line endings to LF on checkout
+* text=auto eol=lf
+
+# Explicitly declare text files
+*.go text
+*.rs text
+*.ts text
+*.tsx text
+*.js text
+*.jsx text
+*.json text
+*.yaml text
+*.yml text
+*.md text
+*.sql text
+*.html text
+*.css text
+*.toml text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.parquet binary

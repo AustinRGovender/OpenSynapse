@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+target/
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+apps/control-plane/control-plane
+apps/control-plane/control-plane.exe
+
+# Tauri
+apps/desktop/src-tauri/target/
+
+# Vite
+apps/web/dist/
+
+# Parquet data
+runs/
+
+# Environment and secrets
+.env
+.env.*
+*.key
+*.pem
+creds*
+!.env.example
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Test and coverage
+coverage/
+*.cover
+*.out
+__snapshots__/
+
+# OS
+.DS_Store
+Desktop.ini
+ehthumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Storybook build
+storybook-static/
+
+# Generated files (keep tracked via explicit add)
+packages/api-client/src/generated.ts
