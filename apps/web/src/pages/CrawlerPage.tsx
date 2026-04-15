@@ -4,6 +4,7 @@ import {
 } from '../stores/crawler-store'
 import type {
   CrawlAuthType,
+  CrawlEngine,
   CapturedRequest,
   GraphNode,
   GraphEdge,
@@ -11,6 +12,12 @@ import type {
 } from '../stores/crawler-store'
 
 // --- Constants ---
+
+const ENGINE_OPTIONS: { value: CrawlEngine; label: string; description: string }[] = [
+  { value: 'rod', label: 'Rod (Browser)', description: 'Headless Chromium — renders JavaScript, handles SPAs' },
+  { value: 'colly', label: 'Colly (HTTP)', description: 'Fast HTTP-only — best for static sites and APIs' },
+  { value: 'zap', label: 'ZAP (Security)', description: 'OWASP ZAP sidecar — security-focused crawling' },
+]
 
 const AUTH_TYPES: { value: CrawlAuthType; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -72,6 +79,31 @@ function ConfigPane() {
               disabled={status === 'crawling'}
               className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-teal-500 disabled:opacity-50"
             />
+          </div>
+
+          {/* Engine selector */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-400">Crawl Engine</label>
+            <select
+              value={config.engine}
+              onChange={(e) => store.setEngine(e.target.value as CrawlEngine)}
+              disabled={status === 'crawling'}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-teal-500 disabled:opacity-50"
+            >
+              {ENGINE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-500">
+              {ENGINE_OPTIONS.find((o) => o.value === config.engine)?.description}
+            </p>
+            {config.engine === 'zap' && (
+              <p className="mt-1 rounded border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[10px] text-amber-400">
+                Requires ZAP sidecar: docker compose --profile security up
+              </p>
+            )}
           </div>
 
           {/* Auth section */}

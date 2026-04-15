@@ -10,8 +10,11 @@ export interface CrawlAuthConfig {
   token: string
 }
 
+export type CrawlEngine = 'rod' | 'colly' | 'zap'
+
 export interface CrawlConfig {
   entry_url: string
+  engine: CrawlEngine
   auth_type: CrawlAuthType
   auth: CrawlAuthConfig
   depth: number
@@ -81,6 +84,7 @@ interface CrawlerState {
 
   // Config actions
   setEntryUrl: (url: string) => void
+  setEngine: (engine: CrawlEngine) => void
   setAuthType: (authType: CrawlAuthType) => void
   setAuth: (auth: Partial<CrawlAuthConfig>) => void
   setDepth: (depth: number) => void
@@ -110,6 +114,7 @@ function stopPolling() {
 
 const defaultConfig: CrawlConfig = {
   entry_url: '',
+  engine: 'rod',
   auth_type: 'none',
   auth: { username: '', password: '', token: '' },
   depth: 3,
@@ -132,6 +137,8 @@ export const useCrawlerStore = create<CrawlerState>((set, get) => ({
 
   setEntryUrl: (url) =>
     set((s) => ({ config: { ...s.config, entry_url: url } })),
+  setEngine: (engine) =>
+    set((s) => ({ config: { ...s.config, engine } })),
   setAuthType: (authType) =>
     set((s) => ({ config: { ...s.config, auth_type: authType } })),
   setAuth: (partial) =>
@@ -170,6 +177,7 @@ export const useCrawlerStore = create<CrawlerState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           entry_url: config.entry_url,
+          engine: config.engine,
           auth_type: config.auth_type,
           auth: config.auth_type !== 'none' ? config.auth : undefined,
           depth: config.depth,
@@ -279,8 +287,8 @@ export const useCrawlerStore = create<CrawlerState>((set, get) => ({
 
       set({
         progress: {
-          pages_discovered: data.pages_discovered ?? 0,
-          requests_captured: data.requests_captured ?? 0,
+          pages_discovered: data.progress?.pages_discovered ?? 0,
+          requests_captured: data.progress?.requests_captured ?? 0,
         },
         graph: data.graph ?? get().graph,
         requests: data.requests ?? get().requests,
@@ -292,7 +300,7 @@ export const useCrawlerStore = create<CrawlerState>((set, get) => ({
           status: data.status,
           graph: data.graph ?? get().graph,
           requests: data.requests ?? get().requests,
-          error: data.status === 'failed' ? (data.error ?? 'Crawl failed') : null,
+          error: data.status === 'failed' ? (data.error_message ?? 'Crawl failed') : null,
         })
       }
     } catch {

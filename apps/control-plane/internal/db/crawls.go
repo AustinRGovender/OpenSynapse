@@ -47,6 +47,7 @@ type CapturedRequest struct {
 type Crawl struct {
 	ID              string          `json:"id"`
 	EntryURL        string          `json:"entry_url"`
+	Engine          string          `json:"engine"`
 	AuthConfig      CrawlAuthConfig `json:"auth_config"`
 	Depth           int             `json:"depth"`
 	SameOrigin      bool            `json:"same_origin"`
@@ -72,10 +73,13 @@ func NewCrawlStore(db *sql.DB) *CrawlStore {
 	return &CrawlStore{db: db}
 }
 
-func (s *CrawlStore) Create(entryURL string, auth CrawlAuthConfig, depth int, sameOrigin bool, blocklist []string, limit int, openapiURL string) (*Crawl, error) {
+func (s *CrawlStore) Create(entryURL, engine string, auth CrawlAuthConfig, depth int, sameOrigin bool, blocklist []string, limit int, openapiURL string) (*Crawl, error) {
 	id := uuid.New().String()
 	now := time.Now().UTC()
 
+	if engine == "" {
+		engine = "rod"
+	}
 	if blocklist == nil {
 		blocklist = []string{}
 	}
@@ -97,9 +101,9 @@ func (s *CrawlStore) Create(entryURL string, auth CrawlAuthConfig, depth int, sa
 	}
 
 	_, err := s.db.Exec(
-		`INSERT INTO crawls (id, entry_url, auth_config, depth, same_origin, blocklist, request_limit, status, progress, graph, requests, openapi_url, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, '[]', ?, ?, ?)`,
-		id, entryURL, string(authJSON), depth, sameOriginInt, string(blocklistJSON), limit,
+		`INSERT INTO crawls (id, entry_url, engine, auth_config, depth, same_origin, blocklist, request_limit, status, progress, graph, requests, openapi_url, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, '[]', ?, ?, ?)`,
+		id, entryURL, engine, string(authJSON), depth, sameOriginInt, string(blocklistJSON), limit,
 		string(progressJSON), string(graphJSON), openapiURLPtr, nowStr, nowStr,
 	)
 	if err != nil {
@@ -109,6 +113,7 @@ func (s *CrawlStore) Create(entryURL string, auth CrawlAuthConfig, depth int, sa
 	return &Crawl{
 		ID:           id,
 		EntryURL:     entryURL,
+		Engine:       engine,
 		AuthConfig:   auth,
 		Depth:        depth,
 		SameOrigin:   sameOrigin,
@@ -132,11 +137,11 @@ func (s *CrawlStore) Get(id string) (*Crawl, error) {
 	var createdAt, updatedAt string
 
 	err := s.db.QueryRow(
-		`SELECT id, entry_url, auth_config, depth, same_origin, blocklist, request_limit, status,
+		`SELECT id, entry_url, engine, auth_config, depth, same_origin, blocklist, request_limit, status,
 		        progress, graph, requests, openapi_url, openapi_spec, generated_plan_id, error_message,
 		        created_at, updated_at
 		 FROM crawls WHERE id = ?`, id,
-	).Scan(&c.ID, &c.EntryURL, &authStr, &c.Depth, &sameOriginInt, &blocklistStr, &c.RequestLimit,
+	).Scan(&c.ID, &c.EntryURL, &c.Engine, &authStr, &c.Depth, &sameOriginInt, &blocklistStr, &c.RequestLimit,
 		&c.Status, &progressStr, &graphStr, &requestsStr, &openapiURL, &openapiSpec, &genPlanID,
 		&errMsg, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {

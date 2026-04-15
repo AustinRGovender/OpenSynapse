@@ -1,16 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/crawler"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 )
 
 type CrawlHandlers struct {
-	crawls *db.CrawlStore
-	plans  *db.PlanStore
+	crawls       *db.CrawlStore
+	plans        *db.PlanStore
+	activeCrawls sync.Map // map[string]context.CancelFunc
 }
 
 func NewCrawlHandlers(crawls *db.CrawlStore, plans *db.PlanStore) *CrawlHandlers {
@@ -18,13 +21,14 @@ func NewCrawlHandlers(crawls *db.CrawlStore, plans *db.PlanStore) *CrawlHandlers
 }
 
 type startCrawlRequest struct {
-	EntryURL   string          `json:"entry_url"`
+	EntryURL   string             `json:"entry_url"`
+	Engine     string             `json:"engine"`
 	Auth       db.CrawlAuthConfig `json:"auth"`
-	Depth      int             `json:"depth"`
-	SameOrigin *bool           `json:"same_origin"`
-	Blocklist  []string        `json:"blocklist"`
-	Limit      int             `json:"limit"`
-	OpenAPIURL string          `json:"openapi_url"`
+	Depth      int                `json:"depth"`
+	SameOrigin *bool              `json:"same_origin"`
+	Blocklist  []string           `json:"blocklist"`
+	Limit      int                `json:"limit"`
+	OpenAPIURL string             `json:"openapi_url"`
 }
 
 func (h *CrawlHandlers) Start(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +40,16 @@ func (h *CrawlHandlers) Start(w http.ResponseWriter, r *http.Request) {
 
 	if req.EntryURL == "" && req.OpenAPIURL == "" {
 		badRequest(w, "VALIDATION_ERROR", "entry_url or openapi_url is required", nil)
+		return
+	}
+
+	// Validate engine
+	engine := req.Engine
+	if engine == "" {
+		engine = "rod"
+	}
+	if engine != "rod" && engine != "colly" && engine != "zap" {
+		badRequest(w, "INVALID_ENGINE", "engine must be one of: rod, colly, zap", nil)
 		return
 	}
 
@@ -60,7 +74,7 @@ func (h *CrawlHandlers) Start(w http.ResponseWriter, r *http.Request) {
 		entryURL = req.OpenAPIURL
 	}
 
-	crawl, err := h.crawls.Create(entryURL, req.Auth, depth, sameOrigin, req.Blocklist, limit, req.OpenAPIURL)
+	crawl, err := h.crawls.Create(entryURL, engine, req.Auth, depth, sameOrigin, req.Blocklist, limit, req.OpenAPIURL)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -70,18 +84,61 @@ func (h *CrawlHandlers) Start(w http.ResponseWriter, r *http.Request) {
 	if req.OpenAPIURL != "" {
 		go h.processOpenAPI(crawl.ID, req.OpenAPIURL)
 	} else {
-		// For Playwright-based crawling, mark as pending
-		// Playwright crawl execution would be triggered here in a production build
-		h.crawls.UpdateStatus(crawl.ID, "completed")
-		h.crawls.UpdateProgress(crawl.ID, db.CrawlProgress{
-			PagesDiscovered:  0,
-			RequestsCaptured: 0,
-		})
+		// Dispatch to the selected engine
+		crawlEngine, engineErr := crawler.GetEngine(engine)
+		if engineErr != nil {
+			h.crawls.SetError(crawl.ID, engineErr.Error())
+		} else {
+			go h.runCrawl(crawl.ID, crawlEngine, crawler.CrawlConfig{
+				EntryURL:   entryURL,
+				Auth:       req.Auth,
+				Depth:      depth,
+				SameOrigin: sameOrigin,
+				Blocklist:  req.Blocklist,
+				Limit:      limit,
+			})
+		}
 	}
 
 	// Re-fetch to get latest status
 	crawl, _ = h.crawls.Get(crawl.ID)
 	writeJSON(w, http.StatusCreated, crawl)
+}
+
+// runCrawl executes a crawl engine in a background goroutine.
+func (h *CrawlHandlers) runCrawl(crawlID string, engine crawler.CrawlEngine, cfg crawler.CrawlConfig) {
+	ctx, cancel := context.WithCancel(context.Background())
+	h.activeCrawls.Store(crawlID, cancel)
+	defer func() {
+		h.activeCrawls.Delete(crawlID)
+		cancel()
+	}()
+
+	h.crawls.UpdateStatus(crawlID, "crawling")
+
+	onProgress := func(progress db.CrawlProgress, graph db.CrawlGraph, requests []db.CapturedRequest) {
+		h.crawls.UpdateProgress(crawlID, progress)
+		h.crawls.UpdateGraph(crawlID, graph, requests)
+	}
+
+	graph, requests, err := engine.Crawl(ctx, cfg, onProgress)
+
+	if ctx.Err() != nil {
+		h.crawls.UpdateStatus(crawlID, "cancelled")
+		return
+	}
+
+	if err != nil {
+		h.crawls.SetError(crawlID, err.Error())
+		return
+	}
+
+	h.crawls.UpdateGraph(crawlID, graph, requests)
+	h.crawls.UpdateProgress(crawlID, db.CrawlProgress{
+		PagesDiscovered:  len(graph.Nodes),
+		RequestsCaptured: len(requests),
+	})
+	h.crawls.UpdateStatus(crawlID, "completed")
 }
 
 func (h *CrawlHandlers) processOpenAPI(crawlID, openapiURL string) {
@@ -257,6 +314,11 @@ func (h *CrawlHandlers) Cancel(w http.ResponseWriter, r *http.Request) {
 	if crawl == nil {
 		notFound(w, "CRAWL", id)
 		return
+	}
+
+	// Cancel the active crawl context if running
+	if cancelFn, ok := h.activeCrawls.LoadAndDelete(id); ok {
+		cancelFn.(context.CancelFunc)()
 	}
 
 	h.crawls.UpdateStatus(id, "cancelled")

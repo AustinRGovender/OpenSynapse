@@ -33,8 +33,14 @@ func Open(path string) (*sql.DB, error) {
 }
 
 // OpenMemory opens an in-memory SQLite database with migrations applied.
+// MaxOpenConns is set to 1 to ensure all goroutines share the same in-memory database.
 func OpenMemory() (*sql.DB, error) {
-	return Open(":memory:")
+	db, err := Open(":memory:")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	return db, nil
 }
 
 func migrate(db *sql.DB) error {
