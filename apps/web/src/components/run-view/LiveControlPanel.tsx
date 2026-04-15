@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRunStore } from '../../stores/run-store'
 
 interface LiveControlPanelProps {
@@ -36,9 +36,14 @@ export function LiveControlPanel({ runId }: LiveControlPanelProps) {
   const currentRps =
     metrics.rps.length > 0 ? metrics.rps[metrics.rps.length - 1].value : 0
 
-  // Elapsed time
+  // Elapsed time — tick a clock state so Date.now() is never called during render
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [])
   const elapsedSeconds = run?.started_at
-    ? Math.floor((Date.now() - new Date(run.started_at).getTime()) / 1000)
+    ? Math.floor((now - new Date(run.started_at).getTime()) / 1000)
     : 0
 
   const isPaused = run?.paused ?? false

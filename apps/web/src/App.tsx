@@ -85,38 +85,24 @@ function PlansListPage() {
   const [galleryOpen, setGalleryOpen] = useState(false)
 
   useEffect(() => {
-    client
-      .health()
+    client.health()
       .then((data) => setHealth(data.status))
       .catch(() => setHealth('unreachable'))
-    loadPlans()
-    loadRuns()
+
+    client.listPlans()
+      .then((result) => setPlans(result.items))
+      .catch(() => {})
+
+    fetch('/api/v1/runs?limit=10')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setRuns(data.items ?? []) })
+      .catch(() => {})
   }, [])
-
-  async function loadPlans() {
-    try {
-      const result = await client.listPlans()
-      setPlans(result.items)
-    } catch {
-      // API may not be available yet
-    }
-  }
-
-  async function loadRuns() {
-    try {
-      const res = await fetch('/api/v1/runs?limit=10')
-      if (res.ok) {
-        const data = await res.json()
-        setRuns(data.items ?? [])
-      }
-    } catch {
-      // API may not be available yet
-    }
-  }
 
   async function deletePlan(id: string) {
     await client.deletePlan(id)
-    loadPlans()
+    const result = await client.listPlans().catch(() => null)
+    if (result) setPlans(result.items)
   }
 
   return (

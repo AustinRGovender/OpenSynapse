@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import {
   useCrawlerStore,
 } from '../stores/crawler-store'
@@ -315,10 +315,9 @@ function CrawlingProgress() {
 // Simple force-directed graph using SVG + canvas-free approach
 function SiteGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const [positions, setPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
 
-  useEffect(() => {
-    if (nodes.length === 0) return
+  const positions = useMemo(() => {
+    if (nodes.length === 0) return new Map<string, { x: number; y: number }>()
 
     // Simple radial layout for nodes
     const posMap = new Map<string, { x: number; y: number }>()
@@ -339,7 +338,7 @@ function SiteGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] })
       })
     }
 
-    setPositions(posMap)
+    return posMap
   }, [nodes])
 
   if (nodes.length === 0) {
