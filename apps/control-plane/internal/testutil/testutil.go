@@ -40,13 +40,16 @@ func NewTestServer(t *testing.T) *TestServer {
 	envStore := db.NewEnvironmentStore(database)
 	runStore := db.NewRunStore(database)
 
+	reportStore := db.NewReportStore(database)
+
 	planHandlers := handlers.NewPlanHandlers(planStore)
 	envHandlers := handlers.NewEnvironmentHandlers(envStore)
-	// Runs without engine (no k6 in tests)
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, nil, nil)
+	reportHandlers := handlers.NewReportHandlers(reportStore, runStore)
+	exportHandlers := handlers.NewExportHandlers(runStore)
 	ws := wsserver.New()
 
-	r := router.New(planHandlers, envHandlers, runHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, ws)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 

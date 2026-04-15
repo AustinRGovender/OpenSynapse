@@ -41,6 +41,7 @@ func main() {
 	planStore := db.NewPlanStore(database)
 	envStore := db.NewEnvironmentStore(database)
 	runStore := db.NewRunStore(database)
+	reportStore := db.NewReportStore(database)
 
 	// Engine
 	eng, err := engine.New()
@@ -56,8 +57,10 @@ func main() {
 	planHandlers := handlers.NewPlanHandlers(planStore)
 	envHandlers := handlers.NewEnvironmentHandlers(envStore)
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, eng, ws)
+	reportHandlers := handlers.NewReportHandlers(reportStore, runStore)
+	exportHandlers := handlers.NewExportHandlers(runStore)
 
-	r := router.New(planHandlers, envHandlers, runHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, ws)
 
 	fmt.Printf("OpenSynapse control plane listening on :%s\n", port)
 	fmt.Printf("Database: %s\n", dbPath)

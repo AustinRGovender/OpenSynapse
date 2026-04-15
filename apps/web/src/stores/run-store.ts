@@ -48,6 +48,18 @@ export interface TimeSeriesPoint {
   value: number
 }
 
+export interface RunListFilters {
+  status?: string
+  from?: string
+  to?: string
+  limit?: number
+  cursor?: string
+}
+
+export interface RunWithPlanName extends Run {
+  plan_name?: string
+}
+
 interface RunState {
   run: Run | null
   metrics: {
@@ -60,8 +72,21 @@ interface RunState {
   wsConnected: boolean
   loading: boolean
 
+  // Runs list state
+  runsList: RunWithPlanName[]
+  runsListLoading: boolean
+  runsListCursor: string | null
+  runsListHasMore: boolean
+
+  // Comparison state
+  compareRuns: RunWithPlanName[]
+  compareLoading: boolean
+
   // Actions
   loadRun: (id: string) => Promise<void>
+  loadRuns: (filters?: RunListFilters) => Promise<void>
+  loadMoreRuns: (filters?: RunListFilters) => Promise<void>
+  loadMultipleRuns: (ids: string[]) => Promise<void>
   connectWebSocket: (runId: string) => void
   disconnectWebSocket: () => void
   appendMetrics: (snapshot: MetricSnapshot) => void
@@ -87,6 +112,12 @@ export const useRunStore = create<RunState>((set, get) => ({
   events: [],
   wsConnected: false,
   loading: false,
+  runsList: [],
+  runsListLoading: false,
+  runsListCursor: null,
+  runsListHasMore: false,
+  compareRuns: [],
+  compareLoading: false,
 
   loadRun: async (id: string) => {
     set({ loading: true })
@@ -100,6 +131,82 @@ export const useRunStore = create<RunState>((set, get) => ({
       set({ run, loading: false })
     } catch {
       set({ loading: false })
+    }
+  },
+
+  loadRuns: async (filters?: RunListFilters) => {
+    set({ runsListLoading: true })
+    try {
+      const params = new URLSearchParams()
+      if (filters?.status && filters.status !== 'all') params.set('status', filters.status)
+      if (filters?.from) params.set('from', filters.from)
+      if (filters?.to) params.set('to', filters.to)
+      params.set('limit', String(filters?.limit ?? 20))
+      const qs = params.toString()
+      const res = await fetch(`/api/v1/runs${qs ? '?' + qs : ''}`)
+      if (res.ok) {
+        const data = await res.json()
+        const items: RunWithPlanName[] = data.items ?? []
+        set({
+          runsList: items,
+          runsListLoading: false,
+          runsListCursor: data.next_cursor ?? null,
+          runsListHasMore: !!data.next_cursor,
+        })
+      } else {
+        set({ runsListLoading: false })
+      }
+    } catch {
+      set({ runsListLoading: false })
+    }
+  },
+
+  loadMoreRuns: async (filters?: RunListFilters) => {
+    const cursor = get().runsListCursor
+    if (!cursor) return
+    set({ runsListLoading: true })
+    try {
+      const params = new URLSearchParams()
+      if (filters?.status && filters.status !== 'all') params.set('status', filters.status)
+      if (filters?.from) params.set('from', filters.from)
+      if (filters?.to) params.set('to', filters.to)
+      params.set('limit', String(filters?.limit ?? 20))
+      params.set('cursor', cursor)
+      const qs = params.toString()
+      const res = await fetch(`/api/v1/runs${qs ? '?' + qs : ''}`)
+      if (res.ok) {
+        const data = await res.json()
+        const items: RunWithPlanName[] = data.items ?? []
+        set({
+          runsList: [...get().runsList, ...items],
+          runsListLoading: false,
+          runsListCursor: data.next_cursor ?? null,
+          runsListHasMore: !!data.next_cursor,
+        })
+      } else {
+        set({ runsListLoading: false })
+      }
+    } catch {
+      set({ runsListLoading: false })
+    }
+  },
+
+  loadMultipleRuns: async (ids: string[]) => {
+    set({ compareLoading: true, compareRuns: [] })
+    try {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/v1/runs/${id}`)
+          if (!res.ok) return null
+          return (await res.json()) as RunWithPlanName
+        }),
+      )
+      set({
+        compareRuns: results.filter((r): r is RunWithPlanName => r !== null),
+        compareLoading: false,
+      })
+    } catch {
+      set({ compareLoading: false })
     }
   },
 

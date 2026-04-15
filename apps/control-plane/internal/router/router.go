@@ -8,7 +8,7 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, ws *wsserver.Server) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -44,6 +44,14 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("PATCH /api/v1/runs/{id}/control", runs.Control)
 	mux.HandleFunc("POST /api/v1/runs/{id}/stop", runs.Stop)
 	mux.HandleFunc("POST /api/v1/runs/{id}/kill", runs.Kill)
+	mux.HandleFunc("POST /api/v1/runs/{id}/export", exports.ExportRun)
+
+	// Comparison & Reports API (section 2.4)
+	mux.HandleFunc("POST /api/v1/compare", reports.Compare)
+	mux.HandleFunc("GET /api/v1/reports", reports.List)
+	mux.HandleFunc("POST /api/v1/reports", reports.Create)
+	mux.HandleFunc("GET /api/v1/reports/{id}", reports.Get)
+	mux.HandleFunc("DELETE /api/v1/reports/{id}", reports.Delete)
 
 	// WebSocket
 	if ws != nil {
