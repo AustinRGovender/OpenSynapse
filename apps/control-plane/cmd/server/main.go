@@ -68,8 +68,9 @@ func main() {
 	fragmentStore := db.NewFragmentStore(database)
 	fragmentStore.SeedBuiltInFragments()
 	fragmentHandlers := handlers.NewFragmentHandlers(fragmentStore)
+	importHandlers := handlers.NewImportHandlers(planStore)
 
-	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, fragmentHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, fragmentHandlers, importHandlers, ws)
 
 	fmt.Printf("OpenSynapse control plane listening on :%s\n", port)
 	fmt.Printf("Database: %s\n", dbPath)

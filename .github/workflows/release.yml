@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---- Build Go binaries for multiple platforms ----
+  build-go:
+    name: Build Go binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64.exe
+    defaults:
+      run:
+        working-directory: apps/control-plane
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -o ../../dist/opensynapse-control-${{ matrix.suffix }} \
+            ./cmd/server
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.suffix }}
+          path: dist/opensynapse-control-${{ matrix.suffix }}
+
+  # ---- Build web app ----
+  build-web:
+    name: Build web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter web build
+
+      - name: Package web dist
+        run: tar -czf dist/opensynapse-web.tar.gz -C apps/web/dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist/opensynapse-web.tar.gz
+
+  # ---- Build and push multi-arch Docker images ----
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    needs: [build-go, build-web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tag
+        id: tag
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push control-plane image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.control-plane
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/control-plane:latest
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.web
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/web:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/web:latest
+
+  # ---- Package Helm chart ----
+  helm:
+    name: Helm chart package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Package chart
+        run: |
+          mkdir -p dist
+          helm package deploy/helm/ --destination dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: dist/*.tgz
+
+  # ---- Create GitHub Release ----
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-go, build-web, docker, helm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release
+          cp artifacts/binary-*/* release/ 2>/dev/null || true
+          cp artifacts/web-dist/* release/ 2>/dev/null || true
+          cp artifacts/helm-chart/* release/ 2>/dev/null || true
+          ls -la release/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

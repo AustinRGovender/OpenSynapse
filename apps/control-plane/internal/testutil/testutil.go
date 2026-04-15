@@ -56,9 +56,10 @@ func NewTestServer(t *testing.T) *TestServer {
 	fragmentStore := db.NewFragmentStore(database)
 	fragmentStore.SeedBuiltInFragments()
 	fragmentHandlers := handlers.NewFragmentHandlers(fragmentStore)
+	importHandlers := handlers.NewImportHandlers(planStore)
 	ws := wsserver.New()
 
-	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, fragmentHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, fragmentHandlers, importHandlers, ws)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 

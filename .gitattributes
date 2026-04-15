@@ -17,6 +17,9 @@
 *.css text
 *.toml text
 
+# Shell scripts — mark as executable
+*.sh text eol=lf
+
 # Binary files
 *.png binary
 *.jpg binary

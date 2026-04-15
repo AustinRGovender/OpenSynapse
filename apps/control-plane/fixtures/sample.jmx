@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Sample Test Plan" enabled="true"/>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Users" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">50</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">10</stringProp>
+        <stringProp name="ThreadGroup.duration">60</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Login Setup" enabled="true"/>
+        <hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Login" enabled="true">
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <stringProp name="HTTPSampler.domain">example.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/api/login</stringProp>
+            <stringProp name="HTTPSampler.postBodyRaw">{"username":"test","password":"test"}</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree/>
+        </hashTree>
+        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="Browse Flow" enabled="true"/>
+        <hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Get Products" enabled="true">
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <stringProp name="HTTPSampler.domain">example.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/api/products</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Check 200" enabled="true">
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <stringProp name="Assertion.test_type">16</stringProp>
+              <stringProp name="Assertion.test_strings">200</stringProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time" enabled="true">
+            <stringProp name="ConstantTimer.delay">2000</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+          <LoopController guiclass="LoopControlPanelGui" testclass="LoopController" testname="Browse 5 Pages" enabled="true">
+            <stringProp name="LoopController.loops">5</stringProp>
+          </LoopController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Get Page" enabled="true">
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+              <stringProp name="HTTPSampler.domain">example.com</stringProp>
+              <stringProp name="HTTPSampler.protocol">https</stringProp>
+              <stringProp name="HTTPSampler.path">/api/products/1</stringProp>
+            </HTTPSamplerProxy>
+            <hashTree/>
+          </hashTree>
+        </hashTree>
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Users CSV" enabled="true">
+          <stringProp name="filename">users.csv</stringProp>
+          <stringProp name="delimiter">,</stringProp>
+          <stringProp name="variableNames">username,password</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

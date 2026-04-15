@@ -8,7 +8,7 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, aiHandlers *handlers.AIHandlers, frags *handlers.FragmentHandlers, ws *wsserver.Server) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, aiHandlers *handlers.AIHandlers, frags *handlers.FragmentHandlers, imports *handlers.ImportHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -26,6 +26,7 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("GET /api/v1/plans/{id}/versions/{version}", plans.GetVersion)
 	mux.HandleFunc("POST /api/v1/plans/{id}/validate", plans.Validate)
 	mux.HandleFunc("POST /api/v1/plans/{id}/compile", plans.Compile)
+	mux.HandleFunc("POST /api/v1/plans/import/jmx", imports.ImportJMX)
 
 	// Environments API (section 2.2)
 	mux.HandleFunc("GET /api/v1/environments", envs.List)

@@ -66,3 +66,28 @@ jobs:
 
       - name: Template chart
         run: helm template test-release deploy/helm/
+
+  docker:
+    name: Docker (image build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build control-plane image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.control-plane
+          push: false
+          tags: opensynapse/control-plane:ci
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.web
+          push: false
+          tags: opensynapse/web:ci
