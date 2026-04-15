@@ -8,7 +8,7 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, aiHandlers *handlers.AIHandlers, ws *wsserver.Server) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, aiHandlers *handlers.AIHandlers, frags *handlers.FragmentHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -70,6 +70,13 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("PUT /api/v1/ai/config", aiHandlers.UpdateConfig)
 	mux.HandleFunc("POST /api/v1/ai/config/test", aiHandlers.TestConfig)
 	mux.HandleFunc("POST /api/v1/ai/analyse", aiHandlers.Analyse)
+
+	// Fragments API (section 2.5)
+	mux.HandleFunc("GET /api/v1/fragments", frags.List)
+	mux.HandleFunc("POST /api/v1/fragments", frags.Create)
+	mux.HandleFunc("GET /api/v1/fragments/{id}", frags.Get)
+	mux.HandleFunc("PUT /api/v1/fragments/{id}", frags.Update)
+	mux.HandleFunc("DELETE /api/v1/fragments/{id}", frags.Delete)
 
 	// WebSocket
 	if ws != nil {

@@ -7,6 +7,7 @@ import { ComparisonPage } from './pages/ComparisonPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
 import { CrawlerPage } from './pages/CrawlerPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TemplateGallery } from './components/templates/TemplateGallery'
 import type { Run } from './stores/run-store'
 
 const client = new OpenSynapseClient('/api/v1')
@@ -81,7 +82,7 @@ function PlansListPage() {
   const [health, setHealth] = useState<string>('checking...')
   const [plans, setPlans] = useState<Plan[]>([])
   const [runs, setRuns] = useState<Run[]>([])
-  const [newPlanName, setNewPlanName] = useState('')
+  const [galleryOpen, setGalleryOpen] = useState(false)
 
   useEffect(() => {
     client
@@ -111,25 +112,6 @@ function PlansListPage() {
     } catch {
       // API may not be available yet
     }
-  }
-
-  async function createPlan() {
-    if (!newPlanName.trim()) return
-    const plan = await client.createPlan({
-      name: newPlanName,
-      description: '',
-      tags: [],
-      root: {
-        id: crypto.randomUUID(),
-        type: 'plan',
-        name: newPlanName,
-        enabled: true,
-        properties: {},
-        children: [],
-      },
-    })
-    setNewPlanName('')
-    window.location.hash = `#/plans/${plan.id}`
   }
 
   async function deletePlan(id: string) {
@@ -178,22 +160,16 @@ function PlansListPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-8">
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newPlanName}
-            onChange={(e) => setNewPlanName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && createPlan()}
-            placeholder="New test plan name..."
-            className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-teal-500"
-          />
+        <div className="flex justify-end">
           <button
-            onClick={createPlan}
+            onClick={() => setGalleryOpen(true)}
             className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500"
           >
-            Create plan
+            New test
           </button>
         </div>
+
+        <TemplateGallery open={galleryOpen} onClose={() => setGalleryOpen(false)} />
 
         <div className="mt-6 space-y-2">
           {plans.length === 0 && (

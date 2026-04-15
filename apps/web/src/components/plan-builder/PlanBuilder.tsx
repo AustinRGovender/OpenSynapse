@@ -3,6 +3,7 @@ import { usePlanStore } from '../../stores/plan-store'
 import { NodeTree } from './NodeTree'
 import { FlowCanvas } from './FlowCanvas'
 import { PropertyPanel } from './PropertyPanel'
+import { FragmentLibrary } from '../fragments/FragmentLibrary'
 
 type RunStatus = 'idle' | 'starting' | 'error'
 
@@ -18,6 +19,7 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
   const [script, setScript] = useState<string | null>(null)
   const [scriptLoading, setScriptLoading] = useState(false)
   const [runStatus, setRunStatus] = useState<RunStatus>('idle')
+  const [showFragments, setShowFragments] = useState(false)
 
   const handleStartRun = useCallback(async () => {
     if (!plan) return
@@ -133,6 +135,16 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
           </button>
           <div className="h-4 w-px bg-slate-800" />
           <button
+            onClick={() => setShowFragments((v) => !v)}
+            className={`rounded px-3 py-1 text-xs font-medium ${
+              showFragments
+                ? 'bg-teal-600/20 text-teal-400'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Fragments
+          </button>
+          <button
             onClick={handleShowScript}
             className="rounded bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700"
           >
@@ -187,9 +199,13 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
           )}
         </div>
 
-        {/* Right: Property Panel (280px) */}
+        {/* Right: Property Panel or Fragment Library (280px) */}
         <div className="w-[280px] flex-shrink-0 border-l border-slate-800 overflow-hidden">
-          <PropertyPanel />
+          {showFragments ? (
+            <FragmentLibrary onClose={() => setShowFragments(false)} />
+          ) : (
+            <PropertyPanel />
+          )}
         </div>
       </div>
     </div>
