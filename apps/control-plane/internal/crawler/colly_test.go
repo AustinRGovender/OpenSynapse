@@ -240,9 +240,9 @@ func TestCollyEngineRequestLimit(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Colly is async, so some requests may be in-flight when the limit is hit.
-	// Verify the limit bounds the crawl — we should get far fewer than 20.
-	if len(requests) > 10 {
-		t.Fatalf("expected requests roughly bounded by limit 3, got %d", len(requests))
+	// With visit counting, we allow at most cfg.Limit link visits plus the
+	// initial root request, so total requests should never exceed limit+1.
+	if len(requests) > cfg.Limit+1 {
+		t.Fatalf("expected at most %d requests (limit %d + root), got %d", cfg.Limit+1, cfg.Limit, len(requests))
 	}
 }

@@ -25,6 +25,7 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 	var edges []db.CrawlGraphEdge
 	var requests []db.CapturedRequest
 	visited := map[string]bool{}
+	visitCount := 0 // tracks dispatched visits (not completed responses)
 
 	c := colly.NewCollector(
 		colly.MaxDepth(cfg.Depth),
@@ -48,7 +49,7 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 		}
 
 		mu.Lock()
-		count := len(requests)
+		count := visitCount
 		mu.Unlock()
 		if cfg.Limit > 0 && count >= cfg.Limit {
 			r.Abort()
@@ -90,7 +91,7 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 		}
 
 		mu.Lock()
-		count := len(requests)
+		count := visitCount
 		mu.Unlock()
 
 		if !ShouldVisit(cfg, cfg.EntryURL, href, count) {
@@ -98,6 +99,7 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 		}
 
 		mu.Lock()
+		visitCount++
 		edges = append(edges, db.CrawlGraphEdge{
 			Source: el.Request.URL.String(),
 			Target: href,
