@@ -8,7 +8,7 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, ws *wsserver.Server) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -57,6 +57,13 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("POST /api/v1/playground/request", playground.ExecuteRequest)
 	mux.HandleFunc("GET /api/v1/playground/collections", playground.ListCollections)
 	mux.HandleFunc("POST /api/v1/playground/collections", playground.CreateCollection)
+
+	// Crawler API (section 2.6)
+	mux.HandleFunc("POST /api/v1/crawls", crawls.Start)
+	mux.HandleFunc("GET /api/v1/crawls/{id}", crawls.Get)
+	mux.HandleFunc("GET /api/v1/crawls/{id}/graph", crawls.GetGraph)
+	mux.HandleFunc("POST /api/v1/crawls/{id}/generate-plan", crawls.GeneratePlan)
+	mux.HandleFunc("POST /api/v1/crawls/{id}/cancel", crawls.Cancel)
 
 	// WebSocket
 	if ws != nil {

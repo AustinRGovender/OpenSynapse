@@ -48,10 +48,12 @@ func NewTestServer(t *testing.T) *TestServer {
 	reportHandlers := handlers.NewReportHandlers(reportStore, runStore)
 	exportHandlers := handlers.NewExportHandlers(runStore)
 	collectionStore := db.NewCollectionStore(database)
+	crawlStore := db.NewCrawlStore(database)
 	playgroundHandlers := handlers.NewPlaygroundHandlers(collectionStore)
+	crawlHandlers := handlers.NewCrawlHandlers(crawlStore, planStore)
 	ws := wsserver.New()
 
-	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, ws)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 

@@ -5,6 +5,7 @@ import { RunView } from './components/run-view/RunView'
 import { RunsListPage } from './pages/RunsListPage'
 import { ComparisonPage } from './pages/ComparisonPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
+import { CrawlerPage } from './pages/CrawlerPage'
 import type { Run } from './stores/run-store'
 
 const client = new OpenSynapseClient('/api/v1')
@@ -37,6 +38,11 @@ function App() {
   // Route: #/playground → playground
   if (hash === '#/playground') {
     return <PlaygroundPage onBack={() => (window.location.hash = '')} />
+  }
+
+  // Route: #/crawler → crawler
+  if (hash === '#/crawler') {
+    return <CrawlerPage onBack={() => (window.location.hash = '')} />
   }
 
   // Route: #/runs/:id → run view
@@ -145,6 +151,12 @@ function PlansListPage() {
               className="rounded px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             >
               Playground
+            </a>
+            <a
+              href="#/crawler"
+              className="rounded px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            >
+              Crawler
             </a>
           </nav>
         </div>
