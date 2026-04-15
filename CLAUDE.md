@@ -17,7 +17,7 @@ OpenSynapse is a self-hosted performance testing platform combining k6 scripting
 | Plan graph       | React Flow                                 |
 | State            | Zustand + TanStack Query                   |
 | Routing          | TanStack Router                            |
-| Crawler          | Playwright (playwright-go)                 |
+| Crawler          | Rod, Colly, OWASP ZAP (see ADR-0003)       |
 | Orchestration    | k6-operator                                |
 | CI               | GitHub Actions                             |
 

@@ -16,11 +16,12 @@ The product is self-contained. It does not phone home, does not require an accou
 - **Live test control** -- modify active VUs, requests per second, and duration while a test is running, without restart
 - **Test template gallery** -- pre-built archetypes (smoke, load, stress, spike, soak, breakpoint, ramp-up, step-load) with sensible defaults
 - **Endpoint playground** -- Postman-style pane for constructing and executing individual requests with timing breakdown
-- **Crawler** -- Playwright-powered crawl of target applications that generates draft test plans with automatic correlation of tokens, session IDs, and CSRF values
+- **Multi-engine crawler** -- crawl target applications to generate draft test plans with three selectable engines: Rod (headless Chromium for SPAs), Colly (fast HTTP for static sites), and OWASP ZAP (security-focused sidecar). Supports form login, bearer, and basic auth
 - **AI analysis** -- opt-in, bring-your-own-key integration with OpenAI, Anthropic, or Azure OpenAI for run insights and bottleneck identification
 - **Multi-run comparison** -- overlay view comparing metrics across selected runs with difference summaries
 - **Export** -- reports in PDF, HTML, CSV, and JSON formats
 - **Reusable fragments** -- library of pre-built plan components (login flows, CSRF extraction, pagination, cart checkout) plus user-defined fragments
+- **JMeter import** -- import existing JMeter `.jmx` test plans and convert them to OpenSynapse plans
 - **Distributed execution** -- scale from a single laptop to 100,000+ VUs on Kubernetes via the k6-operator
 
 ## Quick Start
@@ -41,6 +42,9 @@ docker compose -f deploy/docker/docker-compose.yml up -d
 
 # Open the UI
 open http://localhost:8080
+
+# Optional: start with OWASP ZAP sidecar for security-focused crawling
+docker compose -f deploy/docker/docker-compose.yml --profile security up -d
 ```
 
 Or use the quick-start script:
@@ -118,7 +122,7 @@ OpenSynapse is a three-tier system. The UI tier is a React single-page applicati
 | Plan graph       | React Flow                                 |
 | State            | Zustand + TanStack Query                   |
 | Routing          | TanStack Router                            |
-| Crawler          | Playwright (playwright-go)                 |
+| Crawler          | Rod, Colly, OWASP ZAP                      |
 | Orchestration    | k6-operator                                |
 | CI               | GitHub Actions                             |
 
