@@ -8,7 +8,7 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, ws *wsserver.Server) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -52,6 +52,11 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("POST /api/v1/reports", reports.Create)
 	mux.HandleFunc("GET /api/v1/reports/{id}", reports.Get)
 	mux.HandleFunc("DELETE /api/v1/reports/{id}", reports.Delete)
+
+	// Playground API (section 2.8)
+	mux.HandleFunc("POST /api/v1/playground/request", playground.ExecuteRequest)
+	mux.HandleFunc("GET /api/v1/playground/collections", playground.ListCollections)
+	mux.HandleFunc("POST /api/v1/playground/collections", playground.CreateCollection)
 
 	// WebSocket
 	if ws != nil {

@@ -9,7 +9,7 @@
 | 3     | Local execution engine                   | complete    | 2026-04-14 | 2026-04-14 | E2E run works, 36 tests pass |
 | 4     | Live control                             | complete    | 2026-04-15 | 2026-04-15 | 38 tests pass, control endpoint + UI panel |
 | 5     | Reports, history, and comparison         | complete    | 2026-04-15 | 2026-04-15 | 43 tests pass, compare + export working |
-| 6     | Endpoint playground                      | not started |         |           |       |
+| 6     | Endpoint playground                      | complete    | 2026-04-15 | 2026-04-15 | 48 tests pass, live httpbin E2E verified |
 | 7     | Crawler                                  | not started |         |           |       |
 | 8     | AI analysis                              | not started |         |           |       |
 | 9     | Fragments and template gallery           | not started |         |           |       |

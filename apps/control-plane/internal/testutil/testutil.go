@@ -47,9 +47,11 @@ func NewTestServer(t *testing.T) *TestServer {
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, nil, nil)
 	reportHandlers := handlers.NewReportHandlers(reportStore, runStore)
 	exportHandlers := handlers.NewExportHandlers(runStore)
+	collectionStore := db.NewCollectionStore(database)
+	playgroundHandlers := handlers.NewPlaygroundHandlers(collectionStore)
 	ws := wsserver.New()
 
-	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, ws)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
