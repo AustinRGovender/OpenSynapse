@@ -33,6 +33,14 @@ export interface Run {
   started_at: string | null
   ended_at: string | null
   summary: RunSummary | null
+  paused?: boolean
+}
+
+export interface RunControlPayload {
+  vus?: number
+  rps?: number
+  duration_seconds?: number
+  paused?: boolean
 }
 
 export interface TimeSeriesPoint {
@@ -58,6 +66,9 @@ interface RunState {
   disconnectWebSocket: () => void
   appendMetrics: (snapshot: MetricSnapshot) => void
   addEvent: (event: RunEvent) => void
+  controlRun: (runId: string, control: RunControlPayload) => Promise<{ ok: boolean; error?: string }>
+  stopRun: (runId: string) => Promise<{ ok: boolean; error?: string }>
+  killRun: (runId: string) => Promise<{ ok: boolean; error?: string }>
   reset: () => void
 }
 
@@ -168,6 +179,64 @@ export const useRunStore = create<RunState>((set, get) => ({
 
   addEvent: (event: RunEvent) => {
     set({ events: [...get().events, event] })
+  },
+
+  controlRun: async (runId: string, control: RunControlPayload) => {
+    try {
+      const res = await fetch(`/api/v1/runs/${runId}/control`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(control),
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        return { ok: false, error: `${res.status}: ${text}` }
+      }
+      // Update paused state locally when toggling pause
+      if (control.paused !== undefined) {
+        const run = get().run
+        if (run) {
+          set({ run: { ...run, paused: control.paused } })
+        }
+      }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Network error' }
+    }
+  },
+
+  stopRun: async (runId: string) => {
+    try {
+      const res = await fetch(`/api/v1/runs/${runId}/stop`, { method: 'POST' })
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        return { ok: false, error: `${res.status}: ${text}` }
+      }
+      const run = get().run
+      if (run) {
+        set({ run: { ...run, status: 'cancelled' } })
+      }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Network error' }
+    }
+  },
+
+  killRun: async (runId: string) => {
+    try {
+      const res = await fetch(`/api/v1/runs/${runId}/kill`, { method: 'POST' })
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        return { ok: false, error: `${res.status}: ${text}` }
+      }
+      const run = get().run
+      if (run) {
+        set({ run: { ...run, status: 'cancelled' } })
+      }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Network error' }
+    }
   },
 
   reset: () => {

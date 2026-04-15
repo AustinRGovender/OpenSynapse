@@ -167,3 +167,41 @@ func TestRunEventsEmpty(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(items))
 	}
 }
+
+func TestRunControlWithoutEngine(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	// PATCH control on a non-existent run without engine should return 503
+	controlBody := `{"vus":50}`
+	req, _ := http.NewRequest("PATCH", ts.URL()+"/api/v1/runs/some-id/control", bytes.NewBufferString(controlBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp := ts.Do(req)
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("control: expected 503, got %d", resp.StatusCode)
+	}
+
+	var errResp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	json.NewDecoder(resp.Body).Decode(&errResp)
+	resp.Body.Close()
+
+	if errResp.Error.Code != "ENGINE_NOT_AVAILABLE" {
+		t.Fatalf("expected ENGINE_NOT_AVAILABLE, got %q", errResp.Error.Code)
+	}
+}
+
+func TestRunStopWithoutEngine(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	req, _ := http.NewRequest("POST", ts.URL()+"/api/v1/runs/some-id/stop", nil)
+	resp := ts.Do(req)
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("stop: expected 503, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}

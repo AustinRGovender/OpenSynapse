@@ -217,8 +217,65 @@ func (h *RunHandlers) AddEvent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, event)
 }
 
+func (h *RunHandlers) Control(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if h.engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "ENGINE_NOT_AVAILABLE", "k6 engine is not available", nil)
+		return
+	}
+
+	var req engine.ControlRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		badRequest(w, "INVALID_JSON", "Request body is not valid JSON", nil)
+		return
+	}
+
+	if err := h.engine.ControlRun(id, req); err != nil {
+		writeError(w, http.StatusConflict, "RUN_NOT_ACTIVE", err.Error(), nil)
+		return
+	}
+
+	// Log control events
+	if req.VUs != nil {
+		payload, _ := json.Marshal(map[string]int{"vus": *req.VUs})
+		h.runs.AddEvent(id, "vu_change", payload)
+		if h.ws != nil {
+			h.ws.BroadcastRunEvent(id, map[string]interface{}{"type": "vu_change", "vus": *req.VUs})
+		}
+	}
+	if req.RPS != nil {
+		payload, _ := json.Marshal(map[string]int{"rps": *req.RPS})
+		h.runs.AddEvent(id, "rps_change", payload)
+		if h.ws != nil {
+			h.ws.BroadcastRunEvent(id, map[string]interface{}{"type": "rps_change", "rps": *req.RPS})
+		}
+	}
+	if req.DurationSeconds != nil {
+		payload, _ := json.Marshal(map[string]int{"duration_seconds": *req.DurationSeconds})
+		h.runs.AddEvent(id, "duration_change", payload)
+		if h.ws != nil {
+			h.ws.BroadcastRunEvent(id, map[string]interface{}{"type": "duration_change", "duration_seconds": *req.DurationSeconds})
+		}
+	}
+
+	// Return current state
+	vus, rps, paused, remaining, _ := h.engine.GetRunState(id)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"vus":              vus,
+		"rps":              rps,
+		"paused":           paused,
+		"remaining_seconds": remaining,
+	})
+}
+
 func (h *RunHandlers) Stop(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
+	if h.engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "ENGINE_NOT_AVAILABLE", "k6 engine is not available", nil)
+		return
+	}
 
 	if err := h.engine.StopRun(id); err != nil {
 		writeError(w, http.StatusConflict, "RUN_NOT_ACTIVE", err.Error(), nil)
@@ -230,6 +287,11 @@ func (h *RunHandlers) Stop(w http.ResponseWriter, r *http.Request) {
 
 func (h *RunHandlers) Kill(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
+	if h.engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "ENGINE_NOT_AVAILABLE", "k6 engine is not available", nil)
+		return
+	}
 
 	if err := h.engine.KillRun(id); err != nil {
 		writeError(w, http.StatusConflict, "RUN_NOT_ACTIVE", err.Error(), nil)

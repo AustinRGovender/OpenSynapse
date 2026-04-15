@@ -41,6 +41,7 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("DELETE /api/v1/runs/{id}", runs.Delete)
 	mux.HandleFunc("GET /api/v1/runs/{id}/events", runs.ListEvents)
 	mux.HandleFunc("POST /api/v1/runs/{id}/events", runs.AddEvent)
+	mux.HandleFunc("PATCH /api/v1/runs/{id}/control", runs.Control)
 	mux.HandleFunc("POST /api/v1/runs/{id}/stop", runs.Stop)
 	mux.HandleFunc("POST /api/v1/runs/{id}/kill", runs.Kill)
 

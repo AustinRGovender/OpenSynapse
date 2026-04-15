@@ -7,7 +7,7 @@
 | 1     | Control plane core and data model        | complete    | 2026-04-14 | 2026-04-14 | 11 tests pass, all CRUD verified |
 | 2     | Visual plan builder                      | complete    | 2026-04-14 | 2026-04-14 | 31 tests pass, builder + compiler working |
 | 3     | Local execution engine                   | complete    | 2026-04-14 | 2026-04-14 | E2E run works, 36 tests pass |
-| 4     | Live control                             | not started |         |           |       |
+| 4     | Live control                             | complete    | 2026-04-15 | 2026-04-15 | 38 tests pass, control endpoint + UI panel |
 | 5     | Reports, history, and comparison         | not started |         |           |       |
 | 6     | Endpoint playground                      | not started |         |           |       |
 | 7     | Crawler                                  | not started |         |           |       |

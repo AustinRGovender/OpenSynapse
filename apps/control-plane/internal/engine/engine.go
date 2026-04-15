@@ -2,9 +2,14 @@ package engine
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +33,14 @@ type MetricSnapshot struct {
 	BytesRecv   int64   `json:"bytes_received"`
 }
 
+// ControlRequest represents a live control change.
+type ControlRequest struct {
+	VUs             *int  `json:"vus,omitempty"`
+	RPS             *int  `json:"rps,omitempty"`
+	DurationSeconds *int  `json:"duration_seconds,omitempty"`
+	Paused          *bool `json:"paused,omitempty"`
+}
+
 // MetricsCallback is called every second with aggregated metrics.
 type MetricsCallback func(runID string, snapshot MetricSnapshot)
 
@@ -36,37 +49,46 @@ type CompletionCallback func(runID string, exitCode int, summary *db.RunSummary)
 
 // Engine manages k6 subprocess execution.
 type Engine struct {
-	k6Path   string
-	mu       sync.Mutex
-	active   map[string]*runProcess
+	k6Path string
+	mu     sync.Mutex
+	active map[string]*runProcess
 }
 
 type runProcess struct {
-	cmd    *exec.Cmd
-	cancel context.CancelFunc
-	runID  string
+	cmd          *exec.Cmd
+	cancel       context.CancelFunc
+	runID        string
+	k6APIPort    int
+	currentVUs   int
+	currentRPS   int
+	paused       bool
+	effectiveEnd time.Time
+	startTime    time.Time
+	mu           sync.Mutex
 }
 
 // New creates a new engine. It auto-discovers k6 from PATH.
 func New() (*Engine, error) {
 	k6Path, err := exec.LookPath("k6")
 	if err != nil {
-		// Try common locations
-		for _, p := range []string{"k6", "k6.exe", "/usr/local/bin/k6"} {
-			if _, err := os.Stat(p); err == nil {
-				k6Path = p
-				break
-			}
-		}
-		if k6Path == "" {
-			return nil, fmt.Errorf("k6 binary not found in PATH")
-		}
+		return nil, fmt.Errorf("k6 binary not found in PATH")
 	}
 
 	return &Engine{
 		k6Path: k6Path,
 		active: make(map[string]*runProcess),
 	}, nil
+}
+
+// findFreePort returns a random available TCP port.
+func findFreePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+	return port, nil
 }
 
 // StartRun compiles the plan to a k6 script and runs it as a subprocess.
@@ -78,12 +100,18 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 		return fmt.Errorf("write script: %w", err)
 	}
 
+	// Find a free port for k6's REST API
+	apiPort, err := findFreePort()
+	if err != nil {
+		apiPort = 6565 // fallback
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	args := []string{
 		"run",
 		"--no-color",
-		"--quiet",
+		fmt.Sprintf("--address=localhost:%d", apiPort),
 		scriptPath,
 	}
 
@@ -101,7 +129,6 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 		"SHOULD_STOP=false",
 	)
 
-	// Capture stdout for summary parsing
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -119,12 +146,22 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 		return fmt.Errorf("start k6: %w", err)
 	}
 
-	rp := &runProcess{cmd: cmd, cancel: cancel, runID: runID}
+	now := time.Now()
+	rp := &runProcess{
+		cmd:          cmd,
+		cancel:       cancel,
+		runID:        runID,
+		k6APIPort:    apiPort,
+		currentVUs:   params.VUsTarget,
+		currentRPS:   params.RPSTarget,
+		effectiveEnd: now.Add(time.Duration(params.DurationSeconds) * time.Second),
+		startTime:    now,
+	}
 	e.mu.Lock()
 	e.active[runID] = rp
 	e.mu.Unlock()
 
-	// Background goroutine: parse k6 output for metrics
+	// Background goroutine: wait for process completion
 	go func() {
 		defer os.Remove(scriptPath)
 		defer func() {
@@ -133,7 +170,6 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 			e.mu.Unlock()
 		}()
 
-		// Collect stderr for error logging
 		var stderrLines []string
 		go func() {
 			scanner := bufio.NewScanner(stderr)
@@ -142,12 +178,10 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 			}
 		}()
 
-		// Parse stdout for k6 summary output
 		var outputLines []string
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			line := scanner.Text()
-			outputLines = append(outputLines, line)
+			outputLines = append(outputLines, scanner.Text())
 		}
 
 		exitCode := 0
@@ -159,37 +193,40 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 			}
 		}
 
-		// Parse the k6 summary from output
 		summary := parseK6Summary(outputLines)
-
 		if onComplete != nil {
 			onComplete(runID, exitCode, summary)
 		}
 	}()
 
-	// Background goroutine: emit synthetic metrics every second while running
+	// Background goroutine: emit metrics every second
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
-		startTime := time.Now()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				elapsed := time.Since(startTime).Seconds()
-				// While k6 is running, emit placeholder metrics
-				// (real metrics come from Prometheus remote-write in production;
-				//  for now we emit synthetic ones based on elapsed time)
+				rp.mu.Lock()
+				vus := rp.currentVUs
+				rps := rp.currentRPS
+				rp.mu.Unlock()
+
 				snapshot := MetricSnapshot{
 					TimestampMS: time.Now().UnixMilli(),
-					ActiveVUs:   params.VUsTarget,
-					RPS:         0,
-					P95MS:       0,
-					ErrorRate:   0,
+					ActiveVUs:   vus,
+					RPS:         float64(rps),
 				}
-				_ = elapsed // used for synthetic generation later
+
+				// Try to get real status from k6 API
+				if status := e.getK6Status(rp.k6APIPort); status != nil {
+					if v, ok := status["vus"].(float64); ok {
+						snapshot.ActiveVUs = int(v)
+					}
+				}
+
 				if onMetrics != nil {
 					onMetrics(runID, snapshot)
 				}
@@ -198,6 +235,75 @@ func (e *Engine) StartRun(runID string, script string, params db.RunParameters, 
 	}()
 
 	return nil
+}
+
+// ControlRun applies live control changes to a running test.
+func (e *Engine) ControlRun(runID string, req ControlRequest) error {
+	e.mu.Lock()
+	rp, ok := e.active[runID]
+	e.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("run %s not active", runID)
+	}
+
+	// VU changes: PATCH k6 REST API
+	if req.VUs != nil {
+		err := e.patchK6Status(rp.k6APIPort, map[string]interface{}{
+			"vus": *req.VUs,
+		})
+		if err != nil {
+			log.Printf("control VUs: %v (k6 API may not support externally-controlled for this script)", err)
+		}
+		rp.mu.Lock()
+		rp.currentVUs = *req.VUs
+		rp.mu.Unlock()
+	}
+
+	// RPS changes: update the target (in production, this writes to xk6-kv)
+	if req.RPS != nil {
+		rp.mu.Lock()
+		rp.currentRPS = *req.RPS
+		rp.mu.Unlock()
+	}
+
+	// Duration changes: adjust effective end time
+	if req.DurationSeconds != nil {
+		rp.mu.Lock()
+		rp.effectiveEnd = rp.startTime.Add(time.Duration(*req.DurationSeconds) * time.Second)
+		rp.mu.Unlock()
+	}
+
+	// Pause/resume
+	if req.Paused != nil {
+		if *req.Paused {
+			e.patchK6Status(rp.k6APIPort, map[string]interface{}{"paused": true})
+		} else {
+			e.patchK6Status(rp.k6APIPort, map[string]interface{}{"paused": false})
+		}
+		rp.mu.Lock()
+		rp.paused = *req.Paused
+		rp.mu.Unlock()
+	}
+
+	return nil
+}
+
+// GetRunState returns the current state of a running test.
+func (e *Engine) GetRunState(runID string) (vus int, rps int, paused bool, remainingSec int, ok bool) {
+	e.mu.Lock()
+	rp, exists := e.active[runID]
+	e.mu.Unlock()
+	if !exists {
+		return 0, 0, false, 0, false
+	}
+
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	remaining := int(time.Until(rp.effectiveEnd).Seconds())
+	if remaining < 0 {
+		remaining = 0
+	}
+	return rp.currentVUs, rp.currentRPS, rp.paused, remaining, true
 }
 
 // StopRun gracefully stops a running k6 process.
@@ -209,10 +315,8 @@ func (e *Engine) StopRun(runID string) error {
 		return fmt.Errorf("run %s not active", runID)
 	}
 
-	// Send interrupt for graceful shutdown
 	if rp.cmd.Process != nil {
 		rp.cmd.Process.Signal(os.Interrupt)
-		// Give it 10 seconds then force kill
 		go func() {
 			time.Sleep(10 * time.Second)
 			rp.cancel()
@@ -241,14 +345,63 @@ func (e *Engine) IsRunning(runID string) bool {
 	return ok
 }
 
+// --- k6 REST API helpers ---
+
+func (e *Engine) getK6Status(port int) map[string]interface{} {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/v1/status", port))
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	body, _ := io.ReadAll(resp.Body)
+	json.Unmarshal(body, &result)
+
+	// k6 wraps status in a "data" key
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
+			return attrs
+		}
+	}
+	return result
+}
+
+func (e *Engine) patchK6Status(port int, payload map[string]interface{}) error {
+	body := map[string]interface{}{
+		"data": map[string]interface{}{
+			"type":       "status",
+			"id":         "default",
+			"attributes": payload,
+		},
+	}
+	bodyJSON, _ := json.Marshal(body)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	req, _ := http.NewRequest("PATCH", fmt.Sprintf("http://localhost:%d/v1/status", port), bytes.NewReader(bodyJSON))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("k6 API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("k6 API returned %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
 // parseK6Summary attempts to extract summary stats from k6 stdout output.
 func parseK6Summary(lines []string) *db.RunSummary {
 	summary := &db.RunSummary{ThresholdsPassed: true}
 	output := strings.Join(lines, "\n")
 
-	// Parse common k6 summary patterns
 	patterns := map[string]*float64{
-		`http_reqs[.\s]+(\d+)`:                   nil, // special: int
+		`http_reqs[.\s]+(\d+)`:                   nil,
 		`http_req_duration.*p\(95\)=([0-9.]+)ms`: &summary.P95MS,
 		`http_req_duration.*p\(90\)=([0-9.]+)ms`: &summary.P90MS,
 		`http_req_duration.*p\(50\)=([0-9.]+)ms`: &summary.P50MS,
@@ -269,7 +422,6 @@ func parseK6Summary(lines []string) *db.RunSummary {
 		}
 	}
 
-	// Parse http_req_failed
 	failedRe := regexp.MustCompile(`http_req_failed[.\s]+(\d+\.\d+)%`)
 	if matches := failedRe.FindStringSubmatch(output); len(matches) > 1 {
 		if val, err := strconv.ParseFloat(matches[1], 64); err == nil {
@@ -278,7 +430,6 @@ func parseK6Summary(lines []string) *db.RunSummary {
 		}
 	}
 
-	// Compute throughput (rough: reqs / duration inferred from output)
 	if summary.TotalRequests > 0 {
 		rpsRe := regexp.MustCompile(`http_reqs[.\s]+\d+\s+([0-9.]+)/s`)
 		if matches := rpsRe.FindStringSubmatch(output); len(matches) > 1 {
@@ -287,8 +438,6 @@ func parseK6Summary(lines []string) *db.RunSummary {
 			}
 		}
 	}
-
-	_ = log.Prefix // keep log imported
 
 	return summary
 }

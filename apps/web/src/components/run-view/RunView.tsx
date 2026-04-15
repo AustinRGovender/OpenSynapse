@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useRunStore } from '../../stores/run-store'
 import { MetricCard } from './MetricCard'
 import { LiveChart } from './LiveChart'
+import { LiveControlPanel } from './LiveControlPanel'
 
 interface RunViewProps {
   runId: string
@@ -116,96 +117,102 @@ export function RunView({ runId, onBack }: RunViewProps) {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-6">
-        {/* Metric cards strip */}
-        <div className="grid grid-cols-6 gap-3">
-          <MetricCard label="Total Requests" value={Math.round(totalRequests).toLocaleString()} />
-          <MetricCard label="Failed" value={Math.round(failed).toLocaleString()} alert={failed > 0} />
-          <MetricCard
-            label="Error Rate"
-            value={`${errorRate.toFixed(2)}%`}
-            alert={errorRate > 0}
-          />
-          <MetricCard label="Throughput RPS" value={rps.toFixed(1)} />
-          <MetricCard label="p95 ms" value={p95.toFixed(1)} />
-          <MetricCard label="Active VUs" value={Math.round(activeVUs)} />
-        </div>
+      {/* Content + optional sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main content */}
+        <div className="flex-1 overflow-auto px-6 py-6">
+          {/* Metric cards strip */}
+          <div className="grid grid-cols-6 gap-3">
+            <MetricCard label="Total Requests" value={Math.round(totalRequests).toLocaleString()} />
+            <MetricCard label="Failed" value={Math.round(failed).toLocaleString()} alert={failed > 0} />
+            <MetricCard
+              label="Error Rate"
+              value={`${errorRate.toFixed(2)}%`}
+              alert={errorRate > 0}
+            />
+            <MetricCard label="Throughput RPS" value={rps.toFixed(1)} />
+            <MetricCard label="p95 ms" value={p95.toFixed(1)} />
+            <MetricCard label="Active VUs" value={Math.round(activeVUs)} />
+          </div>
 
-        {/* Charts 2x2 grid */}
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <LiveChart
-            title="Requests per Second"
-            data={metrics.rps}
-            color="#14b8a6"
-            type="line"
-            yLabel="rps"
-          />
-          <LiveChart
-            title="Response Time p95"
-            data={metrics.p95}
-            color="#a78bfa"
-            type="line"
-            yLabel="ms"
-          />
-          <LiveChart
-            title="Error Rate"
-            data={metrics.errorRate}
-            color="#f87171"
-            type="area"
-            yLabel="%"
-          />
-          <LiveChart
-            title="Active Virtual Users"
-            data={metrics.activeVUs}
-            color="#38bdf8"
-            type="step"
-            yLabel="VUs"
-          />
-        </div>
+          {/* Charts 2x2 grid */}
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            <LiveChart
+              title="Requests per Second"
+              data={metrics.rps}
+              color="#14b8a6"
+              type="line"
+              yLabel="rps"
+            />
+            <LiveChart
+              title="Response Time p95"
+              data={metrics.p95}
+              color="#a78bfa"
+              type="line"
+              yLabel="ms"
+            />
+            <LiveChart
+              title="Error Rate"
+              data={metrics.errorRate}
+              color="#f87171"
+              type="area"
+              yLabel="%"
+            />
+            <LiveChart
+              title="Active Virtual Users"
+              data={metrics.activeVUs}
+              color="#38bdf8"
+              type="step"
+              yLabel="VUs"
+            />
+          </div>
 
-        {/* Event log */}
-        <div className="mt-6">
-          <h3 className="mb-3 text-sm font-medium text-slate-300">Event Log</h3>
-          <div className="max-h-64 overflow-auto rounded-lg border border-slate-800 bg-slate-900">
-            {events.length === 0 ? (
-              <p className="px-4 py-6 text-center text-xs text-slate-600">
-                {isRunning ? 'Waiting for events...' : 'No events recorded'}
-              </p>
-            ) : (
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="px-4 py-2 font-medium text-slate-500">Time</th>
-                    <th className="px-4 py-2 font-medium text-slate-500">Level</th>
-                    <th className="px-4 py-2 font-medium text-slate-500">Message</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.map((evt) => {
-                    const levelColor =
-                      evt.level === 'error'
-                        ? 'text-red-400'
-                        : evt.level === 'warn'
-                          ? 'text-yellow-400'
-                          : 'text-slate-400'
-                    return (
-                      <tr key={evt.id} className="border-b border-slate-800/50">
-                        <td className="whitespace-nowrap px-4 py-1.5 font-mono text-slate-500">
-                          {new Date(evt.timestamp).toLocaleTimeString()}
-                        </td>
-                        <td className={`px-4 py-1.5 font-medium uppercase ${levelColor}`}>
-                          {evt.level}
-                        </td>
-                        <td className="px-4 py-1.5 text-slate-300">{evt.message}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
+          {/* Event log */}
+          <div className="mt-6">
+            <h3 className="mb-3 text-sm font-medium text-slate-300">Event Log</h3>
+            <div className="max-h-64 overflow-auto rounded-lg border border-slate-800 bg-slate-900">
+              {events.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-slate-600">
+                  {isRunning ? 'Waiting for events...' : 'No events recorded'}
+                </p>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800">
+                      <th className="px-4 py-2 font-medium text-slate-500">Time</th>
+                      <th className="px-4 py-2 font-medium text-slate-500">Level</th>
+                      <th className="px-4 py-2 font-medium text-slate-500">Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {events.map((evt) => {
+                      const levelColor =
+                        evt.level === 'error'
+                          ? 'text-red-400'
+                          : evt.level === 'warn'
+                            ? 'text-yellow-400'
+                            : 'text-slate-400'
+                      return (
+                        <tr key={evt.id} className="border-b border-slate-800/50">
+                          <td className="whitespace-nowrap px-4 py-1.5 font-mono text-slate-500">
+                            {new Date(evt.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td className={`px-4 py-1.5 font-medium uppercase ${levelColor}`}>
+                            {evt.level}
+                          </td>
+                          <td className="px-4 py-1.5 text-slate-300">{evt.message}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Live control sidebar — visible only when running */}
+        {isRunning && <LiveControlPanel runId={runId} />}
       </div>
     </div>
   )
