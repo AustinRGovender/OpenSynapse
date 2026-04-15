@@ -1,0 +1,22 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-minio
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.minio.port }}
+      targetPort: api
+      protocol: TCP
+      name: api
+    - port: {{ .Values.minio.consolePort }}
+      targetPort: console
+      protocol: TCP
+      name: console
+  selector:
+    {{- include "opensynapse.minio.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+data:
+  OPENSYNAPSE_MODE: "cluster"
+  DB_DSN: {{ include "opensynapse.postgres.dsn" . | quote }}
+  POSTGRES_HOST: {{ .Release.Name }}-postgres
+  POSTGRES_PORT: {{ .Values.postgres.port | quote }}
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}
+  POSTGRES_USER: {{ .Values.postgres.username | quote }}
+  MINIO_ENDPOINT: {{ .Release.Name }}-minio:{{ .Values.minio.port }}
+  MINIO_BUCKET: {{ .Values.minio.bucket | quote }}
+  MINIO_USE_SSL: "false"
