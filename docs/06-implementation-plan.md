@@ -170,11 +170,11 @@ Save-to-plan inserts an HTTP sampler into a user-selected plan.
 
 ## Phase 7 — Crawler
 
-**Objective.** Ship the Playwright-based crawler and the plan generator.
+**Objective.** Ship the multi-engine crawler and the plan generator.
 
 **Deliverables.**
 
-A separate Go service for the crawler (or a package inside control-plane; implementer's call). It spawns Playwright via playwright-go. The crawl configuration, graph output, and correlation logic are described in section F-04.
+A crawler package inside the control plane implementing the `CrawlEngine` interface with three engines: Rod (headless Chromium), Colly (HTTP), and OWASP ZAP (sidecar). See ADR-0003 for engine selection rationale. The crawl configuration, graph output, and correlation logic are described in section F-04.
 
 The crawl result is stored in the database. The plan generator converts it into a draft plan using the heuristics described.
 

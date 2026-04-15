@@ -55,7 +55,7 @@ A Postman-style pane lets the user construct and execute a single request withou
 
 ### 5.4 Crawler
 
-The crawler is the feature that distinguishes OpenSynapse from every competitor. The user provides an entry URL and optional credentials (form login, HTTP basic, or a bearer token). The crawler launches a headless Chromium instance via Playwright, performs the login, and then walks the application. It records every network request in the background and every UI action (clicks, form submissions, navigations) it can reach from the landing page. It respects a configurable depth limit, a same-origin restriction by default, and a path blocklist for destructive actions (delete, logout, DELETE verbs on REST by default).
+The crawler is the feature that distinguishes OpenSynapse from every competitor. The user provides an entry URL, selects a crawl engine, and optionally provides credentials (form login, HTTP basic, or a bearer token). Three engines are available: Rod (headless Chromium via DevTools Protocol for SPAs and JS-heavy apps), Colly (fast pure-Go HTTP crawler for static sites), and OWASP ZAP (security-focused sidecar). The selected engine performs the login and then walks the application. It records every network request in the background and every link it can reach from the landing page. It respects a configurable depth limit, a same-origin restriction by default, and a path blocklist for destructive actions (delete, logout, DELETE verbs on REST by default). See ADR-0003 for the engine selection rationale.
 
 The crawler produces a directed graph of pages and endpoints. It performs automatic correlation by watching for tokens, session IDs, CSRF values, and IDs that appear in one response and are consumed by a subsequent request. It annotates these in the generated plan as parameterised values. The output is a draft test plan that the user reviews, edits, and saves. The user can re-run the crawler on an updated version of the application and OpenSynapse will diff the two graphs to show what changed.
 
@@ -129,6 +129,6 @@ These are flagged for the implementer to resolve during Phase 1 and do not block
 
 Which lightweight embedded database to use for run storage. Candidates: SQLite with a time-series extension, DuckDB, or a pair (SQLite for metadata, Parquet files for raw metric samples). Recommendation in 03-architecture.md: SQLite plus Parquet.
 
-Whether to ship a built-in reverse proxy for recording browser traffic as an alternative to the Playwright crawler. Nice-to-have for v1.1, not v1.
+Whether to ship a built-in reverse proxy for recording browser traffic as an alternative to the browser-based crawler. Nice-to-have for v1.1, not v1.
 
 How to handle long-running soak tests (8+ hours) in desktop mode when the machine sleeps. Recommendation: refuse to start if power settings allow sleep, with a one-click "prevent sleep" helper.

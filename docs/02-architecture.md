@@ -33,7 +33,7 @@ All three controls (VUs, RPS, duration) appear to the user as live sliders. The 
 
 ### 4.1 Desktop (Mac, Windows, Linux)
 
-The desktop build is a single binary produced with Wails or Tauri. The choice is Tauri for smaller binary size (20 to 30 MB vs 80+ MB for Electron) and because it lets us embed the Go control plane as a sidecar binary rather than recompiling it into a JavaScript runtime. The front-end is the same React SPA served from the embedded binary. k6 is bundled as a sidecar executable, patched with the required xk6 extensions (xk6-kv for the token bucket, xk6-browser for the crawler if not using a separate Playwright install). The installer is a signed .dmg for Mac, .msi for Windows, and .deb plus .rpm plus .AppImage for Linux.
+The desktop build is a single binary produced with Wails or Tauri. The choice is Tauri for smaller binary size (20 to 30 MB vs 80+ MB for Electron) and because it lets us embed the Go control plane as a sidecar binary rather than recompiling it into a JavaScript runtime. The front-end is the same React SPA served from the embedded binary. k6 is bundled as a sidecar executable, patched with the required xk6 extensions (xk6-kv for the token bucket). The Rod-based crawler uses the system Chromium install managed by the Rod launcher. The installer is a signed .dmg for Mac, .msi for Windows, and .deb plus .rpm plus .AppImage for Linux.
 
 First-run experience: the app launches, the control plane starts on localhost, a random port is chosen, the UI opens in a window (Tauri's webview, not a browser). The user sees a welcome screen with three paths: "new test", "import JMeter .jmx", or "start a crawl". No account creation, no configuration.
 
@@ -103,11 +103,11 @@ The transformer is stateless and deterministic: the same plan always produces th
 
 ## 10. Crawler subsystem
 
-The crawler runs as a separate Go service that spawns Playwright (via playwright-go). It consumes a crawl job spec (entry URL, auth config, depth, blocklist) and produces a crawl result document (graph of pages, list of network requests with request/response pairs, correlation hints). The result is fed to a "plan generator" which turns the graph into a draft test plan using heuristics: group requests by endpoint prefix, detect CSRF tokens by pattern, parameterise query strings that contain values seen elsewhere in the graph.
+The crawler is implemented as a package inside the control plane with a `CrawlEngine` interface and three engines (see ADR-0003). It consumes a crawl job spec (entry URL, engine selection, auth config, depth, blocklist) and produces a crawl result document (graph of pages, list of network requests with request/response pairs, correlation hints). The result is fed to a "plan generator" which turns the graph into a draft test plan using heuristics: group requests by endpoint prefix, detect CSRF tokens by pattern, parameterise query strings that contain values seen elsewhere in the graph.
 
-Playwright is the right choice here over Puppeteer because it has better network interception APIs and first-class support across Chromium, Firefox, and WebKit, which matters for users whose targets are WebKit-specific.
+Three engines serve different use cases: **Rod** (go-rod/rod) launches headless Chromium via DevTools Protocol for JavaScript-rendered SPAs with full network interception; **Colly** (gocolly/colly) is a pure-Go HTTP crawler for fast static-site crawling with zero browser dependencies; **OWASP ZAP** communicates with a ZAP sidecar via its REST API for security-focused crawling. Rod replaces the originally specified Playwright — see ADR-0003 for rationale.
 
-The crawler is bandwidth-bounded by the target and network-bounded by Playwright's single-page instrumentation, so it does not need distributed execution in v1.
+The crawler is bandwidth-bounded by the target and network-bounded by the browser engine's single-page instrumentation, so it does not need distributed execution in v1.
 
 ## 11. AI integration
 
@@ -138,7 +138,7 @@ OpenSynapse is a load tester; ironically it should be boringly reliable. The con
 | UI charts | Recharts | Good-enough performance, simple API |
 | Plan graph | React Flow | Best-in-class node editor |
 | Desktop shell | Tauri 2 | Small binary, Go sidecar support |
-| Crawler | Playwright (playwright-go) | Best network interception |
+| Crawler | Rod, Colly, OWASP ZAP | Multi-engine: browser, HTTP, security (ADR-0003) |
 | Cluster orchestration | k6-operator | Official, proven, TestRun CRD |
 | Desktop DB | SQLite + Parquet | Embedded, queryable, portable |
 | Cluster DB | Postgres + S3-compatible | Standard cloud-native stack |
