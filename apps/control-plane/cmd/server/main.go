@@ -63,8 +63,10 @@ func main() {
 	crawlStore := db.NewCrawlStore(database)
 	playgroundHandlers := handlers.NewPlaygroundHandlers(collectionStore)
 	crawlHandlers := handlers.NewCrawlHandlers(crawlStore, planStore)
+	aiStore := db.NewAIStore(database)
+	aiHandlers := handlers.NewAIHandlers(aiStore, runStore)
 
-	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, ws)
+	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, ws)
 
 	fmt.Printf("OpenSynapse control plane listening on :%s\n", port)
 	fmt.Printf("Database: %s\n", dbPath)

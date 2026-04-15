@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRunStore } from '../../stores/run-store'
+import { useAIStore } from '../../stores/ai-store'
 import type { Run, TimeSeriesPoint, RunEvent } from '../../stores/run-store'
 import { MetricCard } from './MetricCard'
 import { LiveChart } from './LiveChart'
 import { LiveControlPanel } from './LiveControlPanel'
+import { AnalyseButton } from '../ai/AnalyseButton'
+import { AIInsightsPanel } from '../ai/AIInsightsPanel'
 
 interface RunViewProps {
   runId: string
@@ -327,15 +330,21 @@ function ExportDropdown({ run, metrics, events }: {
 export function RunView({ runId, onBack }: RunViewProps) {
   const { run, metrics, events, wsConnected, loading, loadRun, connectWebSocket, reset } =
     useRunStore()
+  const aiConfig = useAIStore((s) => s.config)
+  const loadAIConfig = useAIStore((s) => s.loadConfig)
+  const aiAnalysis = useAIStore((s) => s.analysis)
+  const clearAnalysis = useAIStore((s) => s.clearAnalysis)
 
   useEffect(() => {
     loadRun(runId)
     connectWebSocket(runId)
+    loadAIConfig()
 
     return () => {
       reset()
+      clearAnalysis()
     }
-  }, [runId, loadRun, connectWebSocket, reset])
+  }, [runId, loadRun, connectWebSocket, reset, loadAIConfig, clearAnalysis])
 
   if (loading) {
     return (
@@ -400,6 +409,7 @@ export function RunView({ runId, onBack }: RunViewProps) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-3">
+          <AnalyseButton runId={runId} />
           <ExportDropdown run={run} metrics={metrics} events={events} />
           <span
             className={`flex items-center gap-1.5 text-xs ${wsConnected ? 'text-teal-400' : 'text-slate-600'}`}
@@ -461,6 +471,11 @@ export function RunView({ runId, onBack }: RunViewProps) {
               yLabel="VUs"
             />
           </div>
+
+          {/* AI Insights Panel */}
+          {(aiAnalysis || aiConfig.enabled) && (
+            <AIInsightsPanel runId={runId} embedded={true} />
+          )}
 
           {/* Event log */}
           <div className="mt-6">

@@ -8,7 +8,7 @@ import (
 )
 
 // New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, ws *wsserver.Server) http.Handler {
+func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, aiHandlers *handlers.AIHandlers, ws *wsserver.Server) http.Handler {
 	mux := http.NewServeMux()
 
 	// System endpoints
@@ -64,6 +64,12 @@ func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs 
 	mux.HandleFunc("GET /api/v1/crawls/{id}/graph", crawls.GetGraph)
 	mux.HandleFunc("POST /api/v1/crawls/{id}/generate-plan", crawls.GeneratePlan)
 	mux.HandleFunc("POST /api/v1/crawls/{id}/cancel", crawls.Cancel)
+
+	// AI API (section 2.7)
+	mux.HandleFunc("GET /api/v1/ai/config", aiHandlers.GetConfig)
+	mux.HandleFunc("PUT /api/v1/ai/config", aiHandlers.UpdateConfig)
+	mux.HandleFunc("POST /api/v1/ai/config/test", aiHandlers.TestConfig)
+	mux.HandleFunc("POST /api/v1/ai/analyse", aiHandlers.Analyse)
 
 	// WebSocket
 	if ws != nil {

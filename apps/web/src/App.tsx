@@ -6,6 +6,7 @@ import { RunsListPage } from './pages/RunsListPage'
 import { ComparisonPage } from './pages/ComparisonPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
 import { CrawlerPage } from './pages/CrawlerPage'
+import { SettingsPage } from './pages/SettingsPage'
 import type { Run } from './stores/run-store'
 
 const client = new OpenSynapseClient('/api/v1')
@@ -43,6 +44,11 @@ function App() {
   // Route: #/crawler → crawler
   if (hash === '#/crawler') {
     return <CrawlerPage onBack={() => (window.location.hash = '')} />
+  }
+
+  // Route: #/settings → settings
+  if (hash === '#/settings') {
+    return <SettingsPage onBack={() => (window.location.hash = '')} />
   }
 
   // Route: #/runs/:id → run view
@@ -157,6 +163,12 @@ function PlansListPage() {
               className="rounded px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             >
               Crawler
+            </a>
+            <a
+              href="#/settings"
+              className="rounded px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            >
+              Settings
             </a>
           </nav>
         </div>

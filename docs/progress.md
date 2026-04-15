@@ -11,7 +11,7 @@
 | 5     | Reports, history, and comparison         | complete    | 2026-04-15 | 2026-04-15 | 43 tests pass, compare + export working |
 | 6     | Endpoint playground                      | complete    | 2026-04-15 | 2026-04-15 | 48 tests pass, live httpbin E2E verified |
 | 7     | Crawler                                  | complete    | 2026-04-15 | 2026-04-15 | 55 tests pass, OpenAPI plan gen verified |
-| 8     | AI analysis                              | not started |         |           |       |
+| 8     | AI analysis                              | complete    | 2026-04-15 | 2026-04-15 | 61 tests pass, key masking verified |
 | 9     | Fragments and template gallery           | not started |         |           |       |
 | 10    | Cluster mode and distributed execution   | not started |         |           |       |
 | 11    | JMeter import, Docker polish, and release| not started |         |           |       |
