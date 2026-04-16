@@ -13,7 +13,11 @@
       "Bash(rm packages/ui/src/components/test-hex.tsx)",
       "Bash(pnpm test:*)",
       "Bash(echo \"EXIT_CODE=$?\")",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(pnpm --version)",
+      "Bash(go version:*)",
+      "Bash(go build:*)",
+      "Bash(git add:*)"
     ]
   }
 }

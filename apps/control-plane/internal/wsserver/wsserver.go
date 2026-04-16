@@ -39,7 +39,10 @@ func New() *Server {
 // HandleWS is the HTTP handler for the WebSocket endpoint.
 func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // Allow any origin in dev
+		// Origin check is deliberately skipped in v1 across all deployment modes;
+		// see docs/decisions/0005-websocket-origin-policy.md for scope, threat model,
+		// and the planned migration to OriginPatterns.
+		InsecureSkipVerify: true,
 	})
 	if err != nil {
 		log.Printf("ws accept: %v", err)

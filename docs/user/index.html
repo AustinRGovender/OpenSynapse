@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSynapse User Guide</title>
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: Inter, -apple-system, system-ui, sans-serif;
+  background: #020617;
+  color: #e2e8f0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100vh;
+  background: #0f172a;
+  border-right: 1px solid #1e293b;
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transition: transform 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+.sidebar-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+.sidebar-header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+.sidebar-header .subtitle {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+}
+.sidebar-nav a {
+  display: block;
+  padding: 6px 20px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: color 150ms, border-color 150ms, background 150ms;
+}
+.sidebar-nav a:hover {
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.5);
+}
+.sidebar-nav a.active {
+  color: #0d9488;
+  border-left-color: #0d9488;
+  background: rgba(13, 148, 136, 0.05);
+}
+
+/* ===== Hamburger ===== */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 200;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid #1e293b;
+  background: #0f172a;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+}
+.hamburger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: #94a3b8;
+  border-radius: 1px;
+  transition: transform 150ms, opacity 150ms;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.7);
+  z-index: 90;
+}
+
+/* ===== Main Content ===== */
+.main {
+  margin-left: 260px;
+  max-width: 820px;
+  padding: 48px 48px 96px;
+}
+
+/* ===== Typography ===== */
+h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: 16px;
+  padding-top: 24px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-top: 32px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-top: 24px;
+  margin-bottom: 8px;
+}
+p { margin-bottom: 12px; color: #cbd5e1; }
+strong { color: #e2e8f0; font-weight: 600; }
+a { color: #0d9488; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ===== Section dividers ===== */
+section {
+  padding-top: 8px;
+  margin-bottom: 48px;
+}
+section + section {
+  border-top: 1px solid #1e293b;
+}
+
+/* ===== Lists ===== */
+ul, ol { margin-bottom: 12px; padding-left: 24px; color: #cbd5e1; }
+li { margin-bottom: 6px; }
+li::marker { color: #64748b; }
+
+/* Numbered steps */
+ol.steps { counter-reset: step; list-style: none; padding-left: 0; }
+ol.steps > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 36px;
+  margin-bottom: 16px;
+}
+ol.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0d9488;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== Code ===== */
+code {
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  background: #1e293b;
+  color: #5eead4;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+pre {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #e2e8f0;
+}
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* ===== Tables ===== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #64748b;
+  font-weight: 500;
+  border-bottom: 1px solid #1e293b;
+  background: #0f172a;
+}
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+  color: #cbd5e1;
+}
+tr:hover td { background: rgba(15, 23, 42, 0.5); }
+
+/* ===== Callout boxes ===== */
+.callout {
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-left: 3px solid;
+}
+.callout p { margin-bottom: 4px; }
+.callout p:last-child { margin-bottom: 0; }
+.callout-tip {
+  background: rgba(13, 148, 136, 0.08);
+  border-color: #0d9488;
+  color: #5eead4;
+}
+.callout-tip strong { color: #2dd4bf; }
+.callout-warn {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+.callout-warn strong { color: #fbbf24; }
+.callout-info {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+.callout-info strong { color: #93c5fd; }
+
+/* ===== Keyboard shortcuts ===== */
+kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 #334155;
+}
+
+/* ===== Cards / Feature blocks ===== */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.card h4 { margin-top: 0; margin-bottom: 4px; color: #e2e8f0; font-size: 13px; }
+.card p { font-size: 12px; color: #94a3b8; margin-bottom: 0; }
+
+/* ===== Node type badges ===== */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+.badge-sampler { background: rgba(13, 148, 136, 0.15); color: #2dd4bf; }
+.badge-controller { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+.badge-auxiliary { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+
+/* ===== Metric cards ===== */
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.metric-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.metric-card .label { font-size: 11px; color: #64748b; }
+.metric-card .value { font-size: 20px; font-weight: 600; color: #e2e8f0; margin-top: 2px; }
+
+/* ===== Timing bar illustration ===== */
+.timing-bar {
+  display: flex;
+  height: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.timing-bar > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ===== Mobile ===== */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .hamburger {
+    display: flex;
+  }
+  .overlay.open {
+    display: block;
+  }
+  .main {
+    margin-left: 0;
+    padding: 60px 20px 80px;
+  }
+  .metric-strip { grid-template-columns: repeat(2, 1fr); }
+  .card-grid { grid-template-columns: 1fr; }
+}
+
+/* ===== Print ===== */
+@media print {
+  body { background: #fff; color: #1a1a1a; }
+  .sidebar, .hamburger, .overlay { display: none !important; }
+  .main {
+    margin-left: 0;
+    max-width: 100%;
+    padding: 24px;
+  }
+  h2 { color: #111; border-top: 1px solid #ccc; padding-top: 16px; }
+  h3 { color: #222; }
+  h4 { color: #333; }
+  p, li, td { color: #333; }
+  code {
+    background: #f0f0f0;
+    color: #0d7377;
+    border: 1px solid #ddd;
+  }
+  pre {
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    color: #333;
+  }
+  .callout { border-left-width: 3px; }
+  .callout-tip { background: #f0fdf4; color: #166534; border-color: #16a34a; }
+  .callout-tip strong { color: #166534; }
+  .callout-warn { background: #fffbeb; color: #92400e; border-color: #d97706; }
+  .callout-warn strong { color: #92400e; }
+  .callout-info { background: #eff6ff; color: #1e40af; border-color: #3b82f6; }
+  .callout-info strong { color: #1e40af; }
+  .card { background: #f8f8f8; border: 1px solid #ddd; }
+  .card h4 { color: #111; }
+  .card p { color: #555; }
+  th { background: #f0f0f0; color: #333; border-bottom: 2px solid #ccc; }
+  td { color: #333; border-bottom: 1px solid #eee; }
+  kbd { background: #eee; border-color: #ccc; color: #333; box-shadow: none; }
+  .badge-sampler { background: #e0f2f1; color: #004d40; }
+  .badge-controller { background: #ede7f6; color: #4a148c; }
+  .badge-auxiliary { background: #fff8e1; color: #e65100; }
+  .metric-card { background: #f8f8f8; border: 1px solid #ddd; }
+  .metric-card .label { color: #666; }
+  .metric-card .value { color: #111; }
+  a { color: #0d7377; }
+  section { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<!-- Hamburger button (mobile) -->
+<button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+  <span></span><span></span><span></span>
+</button>
+
+<!-- Overlay (mobile) -->
+<div class="overlay" id="overlay"></div>
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h1>OpenSynapse</h1>
+    <div class="subtitle">User Guide</div>
+  </div>
+  <div class="sidebar-nav" id="sidebar-nav">
+    <a href="#getting-started">Getting Started</a>
+    <a href="#first-test">Creating Your First Test</a>
+    <a href="#building-plans">Building Test Plans</a>
+    <a href="#running-tests">Running Tests</a>
+    <a href="#live-control">Live Control</a>
+    <a href="#viewing-results">Viewing Results</a>
+    <a href="#comparing-runs">Comparing Runs</a>
+    <a href="#playground">Endpoint Playground</a>
+    <a href="#crawler">Crawler &amp; OpenAPI Import</a>
+    <a href="#ai-analysis">AI Analysis</a>
+    <a href="#templates-fragments">Templates &amp; Fragments</a>
+    <a href="#import-export">Import &amp; Export</a>
+    <a href="#settings">Settings</a>
+    <a href="#shortcuts">Keyboard Shortcuts</a>
+    <a href="#troubleshooting">Troubleshooting / FAQ</a>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<div class="main" id="main-content">
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Getting Started -->
+<!-- ============================================================ -->
+<section id="getting-started">
+<h2>Getting Started</h2>
+
+<h3>Installation</h3>
+<p>OpenSynapse can be installed three ways depending on your environment.</p>
+
+<h4>Desktop App (Windows, macOS, Linux)</h4>
+<ol class="steps">
+  <li>Download the installer for your platform from the releases page.</li>
+  <li>Run the installer. On macOS, drag the app to <code>/Applications</code>. On Windows, run the <code>.msi</code> installer. On Linux, use the <code>.deb</code> or <code>.AppImage</code>.</li>
+  <li>Launch OpenSynapse. The desktop app bundles the control plane, web UI, and a local SQLite database &mdash; everything runs on your machine with no external dependencies.</li>
+</ol>
+
+<h4>Docker (Self-hosted Server)</h4>
+<ol class="steps">
+  <li>Ensure Docker and Docker Compose are installed on your server.</li>
+  <li>Clone the repository or download the <code>deploy/docker/</code> directory.</li>
+  <li>Run the stack:
+    <pre><code>cd deploy/docker
+docker compose up -d</code></pre>
+  </li>
+  <li>Open <code>http://localhost:8080</code> in your browser. The Docker setup includes the Go control plane (port 8090) and the React web app served via nginx (port 8080), which also proxies API and WebSocket requests.</li>
+</ol>
+
+<h4>Kubernetes (Cluster Mode)</h4>
+<ol class="steps">
+  <li>Install the Helm chart from <code>deploy/helm/</code>:
+    <pre><code>helm install opensynapse ./deploy/helm \
+  --set postgres.enabled=true \
+  --set s3.endpoint=your-minio-endpoint</code></pre>
+  </li>
+  <li>Configure your ingress to expose the web UI.</li>
+  <li>For distributed test execution, deploy the k6-operator in your cluster. OpenSynapse will automatically detect it and enable cluster mode.</li>
+</ol>
+
+<h3>First Launch</h3>
+<p>When you open OpenSynapse for the first time, you'll see the <strong>Home view</strong>. This is your starting point for everything.</p>
+
+<h3>UI Overview</h3>
+<p>The interface is organized around these primary views:</p>
+<ul>
+  <li><strong>Home</strong> &mdash; Quick actions: New Test, Crawl Application, Playground. Recent plans and recent runs.</li>
+  <li><strong>Plans</strong> &mdash; All your test plans. Click one to open the Plan Builder.</li>
+  <li><strong>Runs</strong> &mdash; History of all test executions with status, duration, and key metrics.</li>
+  <li><strong>Playground</strong> &mdash; Postman-style endpoint explorer for ad-hoc HTTP requests.</li>
+  <li><strong>Settings</strong> &mdash; AI provider configuration, appearance, integrations, and storage.</li>
+</ul>
+
+<h3>Navigation</h3>
+<p>Use the top navigation bar to switch between views. Each view remembers your scroll position and filter state. The browser's back and forward buttons work naturally since all views are URL-routed.</p>
+
+<div class="callout callout-tip">
+  <p><strong>Tip:</strong> OpenSynapse is designed so you can go from installation to running your first load test in under 10 minutes. Follow the next section to create your first test.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Creating Your First Test -->
+<!-- ============================================================ -->
+<section id="first-test">
+<h2>Creating Your First Test</h2>
+
+<ol class="steps">
+  <li>From the <strong>Home view</strong> or the <strong>Plans list</strong>, click the <strong>"New Test"</strong> button.</li>
+  <li>The <strong>Template Gallery</strong> opens as a modal. You'll see 9 templates, each with an animated load curve preview showing the traffic pattern.</li>
+  <li>For your first test, choose <strong>"Load"</strong> &mdash; it ramps to 50 virtual users over 2 minutes, holds for 10 minutes, then ramps down. This is a safe, typical test pattern.</li>
+  <li>Click <strong>"Use template"</strong>. A new plan is created and the <strong>Plan Builder</strong> opens automatically.</li>
+  <li>The plan already has a root Scenario node configured with the Load template settings. Click the Scenario node to edit its properties in the right panel.</li>
+  <li>Add an <strong>HTTP Request</strong> node as a child of the Scenario. Set the method to <code>GET</code> and enter your target URL.</li>
+  <li>Click the <strong>"Run"</strong> button in the toolbar to start the test. You'll be taken to the live Run View.</li>
+</ol>
+
+<div class="callout callout-info">
+  <p><strong>Note:</strong> You can also start with a <strong>Blank Plan</strong> if you prefer to build everything from scratch. The blank option appears at the top of the Template Gallery.</p>
+</div>
+
+<p>Alternatively, if you just want to test a single endpoint quickly, use the <strong>Playground</strong> instead &mdash; no plan needed.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: Building Test Plans -->
+<!-- ============================================================ -->
+<section id="building-plans">
+<h2>Building Test Plans</h2>
+
+<h3>The Three-Pane Layout</h3>
+<p>The Plan Builder uses a three-pane layout:</p>
+<ul>
+  <li><strong>Left pane (Node Tree, 280px)</strong> &mdash; A hierarchical, collapsible tree of all nodes in your plan. Supports drag-and-drop reordering and search filtering.</li>
+  <li><strong>Centre pane (Flow Canvas)</strong> &mdash; A visual flow diagram showing the selected branch as connected nodes. Powered by React Flow.</li>
+  <li><strong>Right pane (Property Panel, 280px)</strong> &mdash; The form editor for the currently selected node's properties. Switches to the Fragment Library when the Fragments button is active.</li>
+</ul>
+
+<h3>Node Types</h3>
+<p>OpenSynapse has 14 node types organized into three categories:</p>
+
+<h4>Samplers</h4>
+<p>Nodes that generate requests or execute code during the test.</p>
+<div class="card-grid">
+  <div class="card">
+    <h4><span class="badge badge-sampler">H</span> HTTP Request</h4>
+    <p>Send an HTTP request with configurable method, URL, headers, body, and redirect behavior. Supports variable interpolation with <code>${varName}</code>.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-sampler">W</span> WebSocket</h4>
+    <p>Open a WebSocket connection with configurable messages to send, expected responses, connect timeout, and disconnect behavior.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-sampler">{</span> Code Block</h4>
+    <p>Write custom JavaScript that runs in the k6 VU context. Use for anything the visual builder can't express.</p>
+  </div>
+</div>
+
+<h4>Controllers</h4>
+<p>Nodes that control the flow of execution. All controllers can have children.</p>
+<div class="card-grid">
+  <div class="card">
+    <h4><span class="badge badge-controller">S</span> Scenario</h4>
+    <p>Defines an executor (constant-vus, ramping-vus, constant-arrival-rate, etc.) and its parameters. Children run under this executor.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-controller">?</span> If</h4>
+    <p>Children run only when the JavaScript condition evaluates to true.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-controller">:</span> Else</h4>
+    <p>Must follow an If node. Children run when the If condition was false.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-controller">L</span> Loop</h4>
+    <p>Repeat children a fixed number of times. Default: 5 iterations.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-controller">T</span> Transaction</h4>
+    <p>Group children and report aggregated metrics. Translates to k6 <code>group()</code>.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-controller">1</span> Once Only</h4>
+    <p>Children run once per VU regardless of iteration count. Ideal for login and setup steps.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-controller">R</span> Random</h4>
+    <p>Picks one child at random per iteration. Optional weights per child.</p>
+  </div>
+</div>
+
+<h4>Auxiliary</h4>
+<p>Support nodes that configure data, timing, and validation.</p>
+<div class="card-grid">
+  <div class="card">
+    <h4><span class="badge badge-auxiliary">A</span> Assertion</h4>
+    <p>Validate responses: status code, body content (substring, regex, JSONPath), header values, or response time thresholds.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-auxiliary">Z</span> Timer</h4>
+    <p>Insert think time after a request. Types: constant (default 1000ms), uniform random, or Gaussian.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-auxiliary">D</span> Data Source</h4>
+    <p>Feed test data from CSV files, JSON files, or inline arrays. Rows distribute across VUs via k6 SharedArray.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge badge-auxiliary">E</span> Environment</h4>
+    <p>Bind an Environment entity to scope variables to the plan.</p>
+  </div>
+</div>
+
+<h3>Adding Nodes</h3>
+<p>There are three ways to add a node to your plan:</p>
+<ul>
+  <li><strong>Context menu:</strong> Right-click on a parent node in the tree and select the node type from the menu.</li>
+  <li><strong>Add button:</strong> Click the "+" button that appears in the tree when hovering over a node.</li>
+  <li><strong>Drag from palette:</strong> Drag a node type from the palette into the tree at the desired position.</li>
+</ul>
+<p>You can also <strong>cut, copy, paste, and duplicate</strong> nodes &mdash; even between different plans.</p>
+
+<h3>Code View</h3>
+<p>Click <strong>"Show Script"</strong> in the toolbar to see the generated k6 JavaScript. This is a read-only preview of the exact script that will run when you execute the test. Click <strong>"Close"</strong> to return to the flow canvas.</p>
+
+<h3>Search</h3>
+<p>Type in the search box at the top of the node tree to filter nodes. Search matches node names, types, and property values. Matching nodes and their ancestors remain visible; everything else is hidden.</p>
+
+<h3>Undo / Redo</h3>
+<p>All editing operations support undo and redo. Use the buttons in the toolbar or the keyboard shortcuts <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd>.</p>
+
+<h3>Auto-save</h3>
+<p>Every property change is saved automatically (debounced 300ms). The toolbar shows the save status: <strong>Saving...</strong>, <strong>Unsaved</strong>, or <strong>Saved</strong>. Plans are versioned so you can browse history and revert.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Running Tests -->
+<!-- ============================================================ -->
+<section id="running-tests">
+<h2>Running Tests</h2>
+
+<h3>Starting a Run</h3>
+<p>From the Plan Builder, click the <strong>"Run"</strong> button in the top-right of the toolbar. The plan is compiled to a k6 script and execution begins. You're automatically navigated to the <strong>Run View</strong>.</p>
+
+<div class="callout callout-warn">
+  <p><strong>Warning:</strong> Make sure your plan has at least one Scenario node with an HTTP Request child before running. A plan with no requests will complete instantly with no data.</p>
+</div>
+
+<h3>The Run View</h3>
+<p>The Run View is your real-time dashboard during test execution. It shows:</p>
+
+<h4>Status Bar</h4>
+<p>At the top: run ID (truncated), a status badge (pending, running, completed, failed, cancelled), elapsed time, the <strong>Analyse with AI</strong> button, the <strong>Export</strong> dropdown, and a WebSocket connection indicator (Live / Disconnected).</p>
+
+<h4>Six Metric Cards</h4>
+<p>A strip of six cards across the top showing key metrics at a glance:</p>
+<div class="metric-strip">
+  <div class="metric-card">
+    <div class="label">Total Requests</div>
+    <div class="value">12,847</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Failed</div>
+    <div class="value">3</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Error Rate</div>
+    <div class="value">0.02%</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Throughput RPS</div>
+    <div class="value">214.5</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">p95 ms</div>
+    <div class="value">142.3</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Active VUs</div>
+    <div class="value">50</div>
+  </div>
+</div>
+<p>Cards with failures or errors highlight in red to draw attention.</p>
+
+<h4>Four Live Charts</h4>
+<p>Below the metrics, a 2&times;2 grid of charts updates every second during the run:</p>
+<table>
+  <thead>
+    <tr><th>Chart</th><th>Type</th><th>Colour</th><th>Y-Axis</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Requests per Second</td><td>Line</td><td style="color:#14b8a6">Teal</td><td>rps</td></tr>
+    <tr><td>Response Time p95</td><td>Line</td><td style="color:#a78bfa">Purple</td><td>ms</td></tr>
+    <tr><td>Error Rate</td><td>Area</td><td style="color:#f87171">Red</td><td>%</td></tr>
+    <tr><td>Active Virtual Users</td><td>Step</td><td style="color:#38bdf8">Blue</td><td>VUs</td></tr>
+  </tbody>
+</table>
+
+<h4>Event Log</h4>
+<p>A scrollable table at the bottom showing timestamped events with severity levels (info, warn, error). Events include control changes, threshold breaches, and k6 runtime messages.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Live Control -->
+<!-- ============================================================ -->
+<section id="live-control">
+<h2>Live Control</h2>
+<p>While a test is running, the <strong>Live Control Panel</strong> appears as a sidebar on the right side of the Run View. This is OpenSynapse's signature feature: the ability to adjust test parameters in real time without restarting.</p>
+
+<div class="callout callout-info">
+  <p><strong>How it works:</strong> Live control uses k6's externally-controlled executor combined with the xk6-kv extension for a token bucket. Changes are applied within seconds and logged as events on the run timeline.</p>
+</div>
+
+<h3>VU Slider</h3>
+<p>Adjust the number of virtual users from 0 to 500. The current active VU count is displayed at the top. Drag the slider or type an exact number, then click <strong>"Apply"</strong> to send the change.</p>
+
+<h3>RPS Slider</h3>
+<p>Control the requests-per-second rate from 0 to 10,000 (step: 10). The current measured RPS is shown. The token bucket in xk6-kv is updated when you apply.</p>
+
+<h3>Duration Control</h3>
+<p>See the elapsed time and adjust the total test duration. Use the <strong>"+5 min"</strong> and <strong>"-5 min"</strong> quick buttons, or type an exact duration in seconds and click <strong>"Apply"</strong>.</p>
+
+<h3>Action Buttons</h3>
+<table>
+  <thead>
+    <tr><th>Button</th><th>Action</th><th>Confirmation</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Pause / Resume</strong></td><td>Pause all workers via k6's REST API. Resume continues from where it stopped.</td><td>No</td></tr>
+    <tr><td><strong>Stop</strong></td><td>Graceful stop: runs teardown, flushes metrics, marks the run as completed.</td><td>Yes &mdash; click again to confirm</td></tr>
+    <tr><td><strong>Kill</strong></td><td>Forceful stop if graceful stop hangs. Immediately terminates the process.</td><td>Yes &mdash; click again to confirm</td></tr>
+  </tbody>
+</table>
+
+<div class="callout callout-warn">
+  <p><strong>Warning:</strong> Kill is a last resort. It terminates the k6 process without running teardown or flushing final metrics. Use Stop first and only Kill if the test is unresponsive.</p>
+</div>
+
+<p>All control changes are logged to the event stream and appear as vertical markers on the charts with tooltips describing what changed.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: Viewing Results -->
+<!-- ============================================================ -->
+<section id="viewing-results">
+<h2>Viewing Results</h2>
+
+<h3>Post-Run Report</h3>
+<p>After a test completes, the Run View remains showing the final state of all metrics and charts. The charts render from the persisted dataset at full fidelity (not just the live samples).</p>
+
+<h3>Summary Statistics</h3>
+<p>The six metric cards show the final summary values:</p>
+<ul>
+  <li><strong>Total Requests</strong> &mdash; The total number of HTTP requests made during the run.</li>
+  <li><strong>Failed</strong> &mdash; Count of requests that returned non-2xx status codes or timed out.</li>
+  <li><strong>Error Rate</strong> &mdash; Percentage of failed requests.</li>
+  <li><strong>Throughput RPS</strong> &mdash; Average requests per second over the entire run.</li>
+  <li><strong>p95 Response Time</strong> &mdash; 95th percentile response time in milliseconds.</li>
+  <li><strong>Peak VUs</strong> &mdash; Maximum number of active virtual users during the run.</li>
+</ul>
+
+<h3>Export Options</h3>
+<p>Click the <strong>"Export"</strong> dropdown in the toolbar to download the results in one of three formats:</p>
+<table>
+  <thead>
+    <tr><th>Format</th><th>Contents</th><th>Use Case</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>JSON</strong></td>
+      <td>Full run data as stored in the database. Re-importable into another OpenSynapse instance.</td>
+      <td>Archiving, data transfer, programmatic analysis.</td>
+    </tr>
+    <tr>
+      <td><strong>CSV</strong></td>
+      <td>Time-series metrics: time, rps, p95, errorRate, activeVUs.</td>
+      <td>Spreadsheets, custom charting, data analysis.</td>
+    </tr>
+    <tr>
+      <td><strong>HTML</strong></td>
+      <td>Self-contained standalone report with charts rendered from embedded JSON. Works offline.</td>
+      <td>Sharing via email, attaching to tickets, stakeholder reports.</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: Comparing Runs -->
+<!-- ============================================================ -->
+<section id="comparing-runs">
+<h2>Comparing Runs</h2>
+
+<h3>Selecting Runs to Compare</h3>
+<ol class="steps">
+  <li>Navigate to the <strong>Runs</strong> list view.</li>
+  <li>Click the checkbox next to each run you want to compare (up to 5 runs).</li>
+  <li>Click the <strong>"Compare"</strong> button that appears in the toolbar.</li>
+</ol>
+
+<h3>Comparison View</h3>
+<p>The comparison view overlays metrics from all selected runs on shared charts. Each run gets a distinct colour and appears in the chart legend.</p>
+
+<h4>Summary Block</h4>
+<p>At the top, a summary shows:</p>
+<ul>
+  <li>Which runs are being compared (IDs and dates)</li>
+  <li>Which metrics <strong>improved</strong> (highlighted in green)</li>
+  <li>Which metrics <strong>degraded</strong> (highlighted in red)</li>
+  <li>Absolute and percentage differences</li>
+</ul>
+
+<h4>Detection Threshold</h4>
+<p>Changes smaller than <strong>5%</strong> are not flagged as improvements or degradations to avoid noise from natural variance. Only statistically meaningful differences are reported.</p>
+
+<h4>Time Normalization</h4>
+<p>Differences are computed per second of elapsed time within the shorter run. You can switch to <strong>normalized mode</strong> (0-100% progress) if the runs have different durations and you want to compare equivalent phases.</p>
+
+<div class="callout callout-tip">
+  <p><strong>Tip:</strong> Compare a Smoke test run against a Load test run to understand how your application behaves under minimal vs. typical traffic.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: Endpoint Playground -->
+<!-- ============================================================ -->
+<section id="playground">
+<h2>Endpoint Playground</h2>
+<p>The Playground is a Postman-style HTTP client built into OpenSynapse. Use it to explore APIs, test individual endpoints, and save requests for later use in test plans.</p>
+
+<h3>Building a Request</h3>
+<ol class="steps">
+  <li>Select the <strong>HTTP method</strong> from the dropdown: GET, POST, PUT, PATCH, DELETE, HEAD, or OPTIONS. Each method is colour-coded (GET = teal, POST = violet, PUT/PATCH = amber, DELETE = red).</li>
+  <li>Enter the <strong>URL</strong> in the address bar.</li>
+  <li>Configure the request using the four tabs below:
+    <ul>
+      <li><strong>Params</strong> &mdash; Query parameters as key-value pairs.</li>
+      <li><strong>Headers</strong> &mdash; Request headers with enable/disable toggles.</li>
+      <li><strong>Body</strong> &mdash; Choose None, Raw, JSON, or Form. A text area appears for the body content.</li>
+      <li><strong>Auth</strong> &mdash; Authentication configuration (see below).</li>
+    </ul>
+  </li>
+  <li>Click <strong>"Send"</strong> (or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to execute the request.</li>
+</ol>
+
+<h3>Authentication Methods</h3>
+<table>
+  <thead>
+    <tr><th>Type</th><th>Fields</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>None</strong></td><td>&mdash;</td><td>No authentication.</td></tr>
+    <tr><td><strong>Basic</strong></td><td>Username, Password</td><td>HTTP Basic authentication. Credentials are Base64-encoded in the Authorization header.</td></tr>
+    <tr><td><strong>Bearer</strong></td><td>Token</td><td>Sends <code>Authorization: Bearer &lt;token&gt;</code> header.</td></tr>
+    <tr><td><strong>API Key</strong></td><td>Key Name, Key Value, Location (Header or Query)</td><td>Adds the API key as either a header or query parameter.</td></tr>
+  </tbody>
+</table>
+
+<h3>Response Viewer</h3>
+<p>After sending, the response appears below with:</p>
+<ul>
+  <li><strong>Status line</strong> &mdash; Status code with colour coding (2xx green, 3xx yellow, 4xx/5xx red), response time in ms, and response size.</li>
+  <li><strong>Body tab</strong> &mdash; Response body with a "Pretty" toggle for JSON formatting.</li>
+  <li><strong>Headers tab</strong> &mdash; Response headers in a table.</li>
+  <li><strong>Timing tab</strong> &mdash; A breakdown of where time was spent.</li>
+</ul>
+
+<h3>Timing Breakdown</h3>
+<p>The timing tab shows a stacked bar chart visualizing each phase of the request:</p>
+<div class="timing-bar">
+  <div style="width:8%; background:#0ea5e9">DNS</div>
+  <div style="width:12%; background:#14b8a6">Connect</div>
+  <div style="width:15%; background:#8b5cf6">TLS</div>
+  <div style="width:5%; background:#f59e0b">Send</div>
+  <div style="width:45%; background:#f43f5e">Wait</div>
+  <div style="width:15%; background:#22c55e">Receive</div>
+</div>
+<table>
+  <thead>
+    <tr><th>Phase</th><th>What it measures</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>DNS</strong></td><td>Time to resolve the hostname to an IP address.</td></tr>
+    <tr><td><strong>Connect</strong></td><td>Time to establish the TCP connection.</td></tr>
+    <tr><td><strong>TLS</strong></td><td>Time for the TLS/SSL handshake.</td></tr>
+    <tr><td><strong>Send</strong></td><td>Time to transmit the request body.</td></tr>
+    <tr><td><strong>Wait</strong></td><td>Time to first byte (TTFB) &mdash; server processing time.</td></tr>
+    <tr><td><strong>Receive</strong></td><td>Time to download the response body.</td></tr>
+  </tbody>
+</table>
+
+<h3>Collections</h3>
+<p>Save requests into named collections for reuse. Click <strong>"Save to Collection"</strong> in the header, give it a name and collection, and it appears in the left sidebar grouped by collection. Click any saved request to load it back into the builder.</p>
+
+<h3>Save to Plan</h3>
+<p>Click <strong>"Save to Plan"</strong> to convert the current request into an HTTP sampler node in an existing test plan. You'll need to specify the Plan ID and the Parent Node ID where the request should be inserted.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: Crawler & OpenAPI Import -->
+<!-- ============================================================ -->
+<section id="crawler">
+<h2>Crawler &amp; OpenAPI Import</h2>
+<p>The crawler automatically discovers and maps your application's endpoints, then generates a draft test plan from the results.</p>
+
+<h3>Starting a Crawl</h3>
+<ol class="steps">
+  <li>Click <strong>"Crawl Application"</strong> from the Home view.</li>
+  <li>Configure the crawl settings:
+    <ul>
+      <li><strong>Entry URL</strong> &mdash; The starting page (e.g., <code>https://myapp.example.com</code>).</li>
+      <li><strong>Crawl Engine</strong> &mdash; Choose the engine that best fits your target:
+        <ul>
+          <li><strong>Rod (Browser)</strong> &mdash; Headless Chromium via DevTools Protocol. Renders JavaScript, captures all network requests (XHR, fetch, document loads), and handles form login. Best for SPAs and JavaScript-heavy applications.</li>
+          <li><strong>Colly (HTTP)</strong> &mdash; Pure Go HTTP crawler. Fast and lightweight with zero browser dependencies. Discovers links via HTML parsing. Best for static HTML sites and API documentation. Cannot render JavaScript.</li>
+          <li><strong>ZAP (Security)</strong> &mdash; Integrates with an OWASP ZAP sidecar via its REST API. Security-focused crawling with built-in vulnerability detection. Requires the ZAP container: <code>docker compose --profile security up</code>.</li>
+        </ul>
+      </li>
+      <li><strong>Auth</strong> &mdash; Optional: form login (username/password), bearer token, or basic auth.</li>
+      <li><strong>Depth</strong> &mdash; How many link levels to follow (default: 3).</li>
+      <li><strong>Same-origin only</strong> &mdash; Stay on the same domain (default: on).</li>
+      <li><strong>Path blocklist</strong> &mdash; URLs to skip (default includes <code>/logout</code>, <code>/delete</code>, and DELETE methods).</li>
+      <li><strong>Request limit</strong> &mdash; Safety cap on total requests (default: 500).</li>
+    </ul>
+  </li>
+  <li>Click <strong>"Start Crawl"</strong>. The selected engine navigates your site and captures traffic.</li>
+</ol>
+
+<h3>What the Crawler Captures</h3>
+<p>For every page visited, the crawler records:</p>
+<ul>
+  <li>All network requests (XHR, fetch, document loads) with method, URL, headers, body, and response.</li>
+  <li>Links discovered from <code>&lt;a href&gt;</code> tags, navigation buttons, and form submissions.</li>
+  <li>Correlation hints: values that appear in one response and are used in a subsequent request (CSRF tokens, session IDs, JWTs, numeric IDs).</li>
+</ul>
+
+<h3>Plan Generation</h3>
+<p>After the crawl completes, OpenSynapse generates a draft test plan:</p>
+<ul>
+  <li>Requests are grouped by endpoint prefix into <strong>Transaction controllers</strong> representing logical flows.</li>
+  <li>Correlated values become variable extractors and parameters automatically.</li>
+  <li>Login forms become <strong>Once Only controllers</strong> with HTTP samplers.</li>
+  <li>The generated plan opens in the Builder for your review and editing.</li>
+</ul>
+
+<h3>OpenAPI / Swagger Import</h3>
+<p>If the target exposes an OpenAPI or Swagger document, the crawler detects it automatically by probing common paths:</p>
+<ul>
+  <li><code>/swagger.json</code></li>
+  <li><code>/openapi.json</code></li>
+  <li><code>/v3/api-docs</code></li>
+  <li><code>/api-docs</code></li>
+</ul>
+<p>When found, each API operation becomes an HTTP sampler node. Example values from the schema populate request parameters, and security schemes map to auth helpers.</p>
+
+<h3>Re-crawl and Diff</h3>
+<p>You can re-run the crawler on the same target and compare results. The diff view highlights:</p>
+<ul>
+  <li>Added pages and endpoints</li>
+  <li>Removed pages and endpoints</li>
+  <li>Changed endpoints (URL or method changes)</li>
+  <li>Changed response shapes</li>
+</ul>
+<p>Choose which changes to merge into your existing plan.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 10: AI Analysis -->
+<!-- ============================================================ -->
+<section id="ai-analysis">
+<h2>AI Analysis</h2>
+<p>AI analysis is <strong>opt-in</strong> and uses your own API keys. No data is ever sent to an AI provider without your explicit click.</p>
+
+<h3>Setting Up</h3>
+<ol class="steps">
+  <li>Open <strong>Settings</strong> and go to the <strong>AI</strong> tab.</li>
+  <li>Select your provider: <strong>OpenAI</strong>, <strong>Anthropic</strong>, or <strong>Azure OpenAI</strong>.</li>
+  <li>Paste your API key. It's validated with a minimal test call and stored securely in the OS keychain.</li>
+  <li>Choose a model from the dropdown (sensible defaults are pre-selected per provider).</li>
+  <li>Optionally set a <strong>monthly spend cap</strong> to limit costs.</li>
+</ol>
+
+<h3>Analysing a Run</h3>
+<ol class="steps">
+  <li>Open a completed run in the Run View.</li>
+  <li>Click <strong>"Analyse with AI"</strong> in the toolbar.</li>
+  <li>A prompt preview shows exactly what data will be sent: the run summary and extracted metrics. <strong>No raw request/response data is included</strong> &mdash; only aggregate metrics.</li>
+  <li>Confirm to send the request. The AI response appears as markdown in the <strong>Insights Panel</strong> below the charts.</li>
+</ol>
+
+<h3>Built-in Questions</h3>
+<p>Three standard analysis prompts are available:</p>
+<ul>
+  <li><strong>"What does this run tell me?"</strong> &mdash; Summary analysis of a single run.</li>
+  <li><strong>"What changed between these runs?"</strong> &mdash; Comparative analysis in the comparison view.</li>
+  <li><strong>"What test should I run next?"</strong> &mdash; Follow-up suggestions based on results.</li>
+</ul>
+<p>You can also type <strong>free-form questions</strong> that are sent with the run context.</p>
+
+<h3>Cost Tracking</h3>
+<p>Each analysis shows the <strong>token count</strong> used and an <strong>estimated cost</strong>. This helps you stay within your budget and understand how much each query costs.</p>
+
+<div class="callout callout-tip">
+  <p><strong>Tip:</strong> AI analysis is most valuable after Stress or Breakpoint tests where there's a clear inflection point. The AI can often identify the VU count or RPS level where performance degraded and suggest possible causes.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 11: Templates & Fragments -->
+<!-- ============================================================ -->
+<section id="templates-fragments">
+<h2>Templates &amp; Fragments</h2>
+
+<h3>Templates</h3>
+<p>The 9 built-in templates give you pre-configured load profiles for common test scenarios:</p>
+<table>
+  <thead>
+    <tr><th>Template</th><th>Description</th><th>Configuration</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Smoke</strong></td><td>Verify the test plan works</td><td>1 VU, 30s, constant-vus</td></tr>
+    <tr><td><strong>Load</strong></td><td>Sustained typical traffic</td><td>Ramp to 50 VUs over 2m, hold 10m, ramp down 2m</td></tr>
+    <tr><td><strong>Stress</strong></td><td>Find the breaking point</td><td>Staged ramp: 50, 100, 200, 400 VUs at 3m each</td></tr>
+    <tr><td><strong>Spike</strong></td><td>Sudden burst and drop</td><td>Hold 10 VUs 1m, jump to 500 for 30s, back to 10</td></tr>
+    <tr><td><strong>Soak</strong></td><td>Long-duration stability</td><td>50 VUs, 4 hours, constant-vus</td></tr>
+    <tr><td><strong>Breakpoint</strong></td><td>Ramp until failure</td><td>10 to 1000 VUs over 10m, 0s graceful ramp-down</td></tr>
+    <tr><td><strong>Trickle Feed</strong></td><td>Low constant rate for endurance</td><td>1 req/s, 1 hour, constant-arrival-rate</td></tr>
+    <tr><td><strong>Ramp-up</strong></td><td>Linear increase only</td><td>0 to 200 VUs over 10m</td></tr>
+    <tr><td><strong>Step Load</strong></td><td>Discrete plateaus</td><td>+50 VUs every 2m, 10 steps up to 500 VUs</td></tr>
+  </tbody>
+</table>
+
+<h3>Fragments</h3>
+<p>Fragments are reusable node subtrees that you can insert into any plan. Access them via the <strong>"Fragments"</strong> button in the Plan Builder toolbar.</p>
+
+<h4>10 Built-in Fragments</h4>
+<table>
+  <thead>
+    <tr><th>Fragment</th><th>Description</th><th>Bindings</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Generic Form Login</strong></td><td>Login via HTML form with username and password</td><td>USERNAME, PASSWORD</td></tr>
+    <tr><td><strong>CSRF Token Extraction</strong></td><td>Extract CSRF token from a page for subsequent requests</td><td>CSRF_PAGE</td></tr>
+    <tr><td><strong>Pagination Walker</strong></td><td>Walk through paginated results (10 pages)</td><td>ENDPOINT</td></tr>
+    <tr><td><strong>Search-then-Select</strong></td><td>Search for items and select the first result</td><td>QUERY, ITEM_ID</td></tr>
+    <tr><td><strong>Cart Checkout</strong></td><td>Add item to cart and checkout</td><td>PRODUCT_ID</td></tr>
+    <tr><td><strong>File Upload</strong></td><td>Upload a file via multipart form</td><td>UPLOAD_PATH</td></tr>
+    <tr><td><strong>File Download with Hash</strong></td><td>Download a file and verify its hash</td><td>DOWNLOAD_PATH</td></tr>
+    <tr><td><strong>OAuth Authorization Code</strong></td><td>OAuth 2.0 authorization code flow</td><td>TOKEN_URL, CLIENT_ID, CLIENT_SECRET</td></tr>
+    <tr><td><strong>SAML Login Stub</strong></td><td>SAML authentication (requires IdP configuration)</td><td>SAML_ACS</td></tr>
+    <tr><td><strong>Wait-for-Condition Polling</strong></td><td>Poll an endpoint until a condition is met (30 retries, 2s interval)</td><td>POLL_PATH</td></tr>
+  </tbody>
+</table>
+
+<div class="callout callout-info">
+  <p><strong>Note:</strong> Built-in fragments cannot be modified or deleted. They serve as starting points &mdash; insert one, then customize it to match your application.</p>
+</div>
+
+<h4>Creating User Fragments</h4>
+<ol class="steps">
+  <li>In the Plan Builder, select a subtree of nodes you want to reuse.</li>
+  <li>Right-click and choose <strong>"Save as Fragment"</strong>.</li>
+  <li>Give it a name and optional tags.</li>
+  <li>Define <strong>variable bindings</strong> for any values that should be configurable when inserting the fragment.</li>
+</ol>
+
+<h4>Inserting a Fragment</h4>
+<p>From the Fragment Library sidebar, drag a fragment into the node tree, or right-click a parent node and choose <strong>"Insert Fragment"</strong>. If the fragment has bindings, a dialog appears prompting you to fill in the required values.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 12: Import & Export -->
+<!-- ============================================================ -->
+<section id="import-export">
+<h2>Import &amp; Export</h2>
+
+<h3>JMeter .jmx Import</h3>
+<p>Migrating from JMeter? OpenSynapse can import <code>.jmx</code> files and convert them to native test plans.</p>
+
+<ol class="steps">
+  <li>Go to <strong>Plans</strong> and click <strong>"Import"</strong>.</li>
+  <li>Select your <code>.jmx</code> file.</li>
+  <li>The importer parses the XML, maps JMeter elements to OpenSynapse node types, and creates a draft plan.</li>
+  <li>Review the import log to see what was converted, approximated, or preserved as code blocks.</li>
+  <li>The plan opens in the Builder for final adjustments.</li>
+</ol>
+
+<h4>Supported JMeter Elements</h4>
+<table>
+  <thead>
+    <tr><th>JMeter Element</th><th>Maps To</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>ThreadGroup</td><td>Scenario</td></tr>
+    <tr><td>HTTPSamplerProxy</td><td>HTTP Request</td></tr>
+    <tr><td>HeaderManager</td><td>Headers on HTTP Request</td></tr>
+    <tr><td>CSVDataSet</td><td>Data Source</td></tr>
+    <tr><td>IfController</td><td>If controller</td></tr>
+    <tr><td>WhileController</td><td>Loop controller</td></tr>
+    <tr><td>LoopController</td><td>Loop controller</td></tr>
+    <tr><td>TransactionController</td><td>Transaction controller</td></tr>
+    <tr><td>OnceOnlyController</td><td>Once Only controller</td></tr>
+    <tr><td>ConstantTimer</td><td>Timer (constant)</td></tr>
+    <tr><td>UniformRandomTimer</td><td>Timer (uniform random)</td></tr>
+    <tr><td>ResponseAssertion</td><td>Assertion</td></tr>
+    <tr><td>JSONPathAssertion</td><td>Assertion (JSONPath)</td></tr>
+    <tr><td>RegexExtractor</td><td>Code Block (extraction logic)</td></tr>
+    <tr><td>JSONExtractor</td><td>Code Block (extraction logic)</td></tr>
+    <tr><td>XPath2Extractor</td><td>Code Block (extraction logic)</td></tr>
+  </tbody>
+</table>
+
+<h4>Unsupported Elements</h4>
+<p>These JMeter elements cannot be directly mapped and are preserved as <strong>Code Block</strong> nodes with comments explaining what was lost:</p>
+<ul>
+  <li><strong>JSR223 samplers</strong> with arbitrary Groovy code</li>
+  <li><strong>BeanShell</strong> samplers and processors</li>
+  <li><strong>JDBC samplers</strong> (planned for v1.1)</li>
+  <li><strong>SOAP samplers</strong> (planned for v1.1)</li>
+  <li><strong>JMS samplers</strong> (not planned)</li>
+</ul>
+
+<h3>Run Export Formats</h3>
+<p>Every run can be exported in three formats from the Run View toolbar:</p>
+<ul>
+  <li><strong>JSON</strong> &mdash; Complete run data, re-importable into another OpenSynapse instance.</li>
+  <li><strong>CSV</strong> &mdash; Time-series metrics in a flat format for spreadsheets and analysis tools.</li>
+  <li><strong>HTML</strong> &mdash; Standalone report with embedded charts that works offline in any browser.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 13: Settings -->
+<!-- ============================================================ -->
+<section id="settings">
+<h2>Settings</h2>
+
+<h3>AI Tab</h3>
+<p>This is the currently functional settings tab. Configure your AI provider for test analysis:</p>
+<ul>
+  <li><strong>Provider</strong> &mdash; Choose between OpenAI, Anthropic, or Azure OpenAI.</li>
+  <li><strong>API Key</strong> &mdash; Your provider API key. Validated on entry and stored in the OS keychain.</li>
+  <li><strong>Model</strong> &mdash; Select which model to use. Defaults are pre-selected per provider.</li>
+  <li><strong>Monthly Spend Cap</strong> &mdash; Set a maximum monthly spend to prevent unexpected costs.</li>
+  <li><strong>Enable/Disable</strong> &mdash; Toggle AI features on or off globally.</li>
+</ul>
+
+<h3>Planned Settings Tabs</h3>
+<p>The following tabs are planned for upcoming releases:</p>
+<ul>
+  <li><strong>General</strong> &mdash; Default environment, default template, keyboard shortcut customization.</li>
+  <li><strong>Appearance</strong> &mdash; Theme (system/light/dark), density (compact/comfortable), chart colour palette.</li>
+  <li><strong>Integrations</strong> &mdash; Webhook URLs for run events, Slack webhook, Prometheus remote-write, Git integration.</li>
+  <li><strong>Storage</strong> &mdash; Database location (desktop mode), retention policies, manual cleanup.</li>
+  <li><strong>About</strong> &mdash; Version, license, docs links, log file location, diagnostic bundle export.</li>
+</ul>
+
+<div class="callout callout-info">
+  <p><strong>Note:</strong> These additional settings tabs are under development and will appear in future releases. The AI tab is fully functional now.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 14: Keyboard Shortcuts -->
+<!-- ============================================================ -->
+<section id="shortcuts">
+<h2>Keyboard Shortcuts</h2>
+
+<table>
+  <thead>
+    <tr><th>Shortcut</th><th>Context</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td>
+      <td>Plan Builder</td>
+      <td>Undo the last edit operation</td>
+    </tr>
+    <tr>
+      <td><kbd>Ctrl</kbd> + <kbd>Y</kbd></td>
+      <td>Plan Builder</td>
+      <td>Redo the last undone operation</td>
+    </tr>
+    <tr>
+      <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td>
+      <td>Plan Builder</td>
+      <td>Redo (alternative)</td>
+    </tr>
+    <tr>
+      <td><kbd>Ctrl</kbd> + <kbd>S</kbd></td>
+      <td>Plan Builder</td>
+      <td>Save the current plan immediately</td>
+    </tr>
+    <tr>
+      <td><kbd>Ctrl</kbd> + <kbd>Enter</kbd></td>
+      <td>Playground</td>
+      <td>Send the current HTTP request</td>
+    </tr>
+    <tr>
+      <td><kbd>Escape</kbd></td>
+      <td>Template Gallery / Modals</td>
+      <td>Close the current modal or dialog</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-tip">
+  <p><strong>Tip:</strong> On macOS, use <kbd>Cmd</kbd> instead of <kbd>Ctrl</kbd> for all shortcuts. OpenSynapse detects your platform automatically.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 15: Troubleshooting / FAQ -->
+<!-- ============================================================ -->
+<section id="troubleshooting">
+<h2>Troubleshooting / FAQ</h2>
+
+<h3>The Run button shows "Failed" and doesn't start</h3>
+<p><strong>Cause:</strong> The control plane API is unreachable or the plan has a compilation error.</p>
+<ul>
+  <li>Check that the control plane is running. For Docker, run <code>docker compose ps</code> and verify the control-plane container is healthy.</li>
+  <li>Click <strong>"Show Script"</strong> in the Plan Builder. If compilation fails, the error message will appear in the script pane.</li>
+  <li>Ensure your plan has at least one Scenario node with at least one sampler child.</li>
+</ul>
+
+<h3>Charts show no data during a run</h3>
+<p><strong>Cause:</strong> The WebSocket connection is disconnected.</p>
+<ul>
+  <li>Check the connection indicator in the top-right of the Run View. It should say <strong>"Live"</strong> with a teal dot.</li>
+  <li>If it says <strong>"Disconnected"</strong>, the browser lost connection to the control plane. Refresh the page to reconnect.</li>
+  <li>If using Docker, ensure the WebSocket port is exposed and not blocked by a reverse proxy.</li>
+</ul>
+
+<h3>Live control changes don't take effect</h3>
+<p><strong>Cause:</strong> The plan must use the <code>externally-controlled</code> executor for live control to work.</p>
+<ul>
+  <li>Open the plan in the Builder and check the Scenario node's executor setting.</li>
+  <li>If using a different executor (e.g., <code>constant-vus</code>), VU and RPS controls will send changes but the k6 runtime may not honour them.</li>
+  <li>For full live control support, use the <code>externally-controlled</code> executor with xk6-kv.</li>
+</ul>
+
+<h3>JMeter import produces many Code Block nodes</h3>
+<p><strong>Cause:</strong> The .jmx file contains elements that don't have a direct OpenSynapse equivalent.</p>
+<ul>
+  <li>BeanShell, JSR223 Groovy, and JDBC samplers are preserved as Code Blocks with comments.</li>
+  <li>Review each Code Block and rewrite the logic using OpenSynapse's native nodes where possible.</li>
+  <li>Complex Groovy logic may need to be adapted to JavaScript for k6 compatibility.</li>
+</ul>
+
+<h3>AI analysis returns an error</h3>
+<p><strong>Cause:</strong> API key issue, network problem, or spend cap reached.</p>
+<ul>
+  <li>Go to <strong>Settings &gt; AI</strong> and verify your API key is valid.</li>
+  <li>Check that your monthly spend cap hasn't been reached.</li>
+  <li>Ensure your network allows outbound HTTPS connections to your AI provider.</li>
+  <li>Try a different model if the selected one is unavailable.</li>
+</ul>
+
+<h3>Crawler doesn't find all pages</h3>
+<p><strong>Cause:</strong> Depth limit, SPA routing, or authentication issue.</p>
+<ul>
+  <li>Increase the <strong>crawl depth</strong> if your site has deeply nested pages.</li>
+  <li>For SPAs with client-side routing, select the <strong>Rod (Browser)</strong> engine which uses headless Chromium to render JavaScript &mdash; but dynamically loaded content behind user interactions may require a higher request limit. The <strong>Colly (HTTP)</strong> engine cannot render JavaScript.</li>
+  <li>If pages require authentication, configure the auth settings before crawling.</li>
+  <li>Check the <strong>path blocklist</strong> &mdash; you may have accidentally blocked paths you want to include.</li>
+</ul>
+
+<h3>The desktop app won't start</h3>
+<p><strong>Cause:</strong> Port conflict or corrupted database.</p>
+<ul>
+  <li>The control plane binds to port 3000 by default. Check if another process is using that port.</li>
+  <li>On Windows: <code>netstat -ano | findstr :3000</code></li>
+  <li>On macOS/Linux: <code>lsof -i :3000</code></li>
+  <li>If the database is corrupted, the app stores its data in the user data directory. You can reset it by deleting the database file (you'll lose existing plans and runs).</li>
+</ul>
+
+<h3>Export files are empty</h3>
+<p><strong>Cause:</strong> The run has no metrics data.</p>
+<ul>
+  <li>This happens if the test completed instantly (no requests were made) or if you're exporting a run that's still pending.</li>
+  <li>Wait for the run to reach "completed" or "failed" status before exporting.</li>
+  <li>Verify the plan actually sends requests &mdash; a Scenario with no sampler children produces no data.</li>
+</ul>
+
+<h3>How do I reset all data?</h3>
+<p>For the desktop app, delete the SQLite database from your user data directory. For Docker, run:</p>
+<pre><code>docker compose down -v
+docker compose up -d</code></pre>
+<p>This removes all volumes including the database. All plans, runs, and settings will be lost.</p>
+</section>
+
+</div><!-- /.main -->
+
+<!-- ===== JavaScript ===== -->
+<script>
+(function() {
+  // --- Mobile hamburger toggle ---
+  var hamburger = document.getElementById('hamburger');
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('overlay');
+
+  function toggleMenu() {
+    var isOpen = sidebar.classList.contains('open');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+    hamburger.classList.toggle('open');
+    hamburger.setAttribute('aria-expanded', !isOpen);
+  }
+
+  function closeMenu() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+    hamburger.classList.remove('open');
+    hamburger.setAttribute('aria-expanded', 'false');
+  }
+
+  hamburger.addEventListener('click', toggleMenu);
+  overlay.addEventListener('click', closeMenu);
+
+  // Close menu when a sidebar link is clicked (mobile)
+  var navLinks = document.querySelectorAll('.sidebar-nav a');
+  navLinks.forEach(function(link) {
+    link.addEventListener('click', function() {
+      if (window.innerWidth <= 768) {
+        closeMenu();
+      }
+    });
+  });
+
+  // --- Scroll-spy for sidebar ---
+  var sections = document.querySelectorAll('section[id]');
+  var navItems = document.querySelectorAll('.sidebar-nav a');
+  var navMap = {};
+
+  navItems.forEach(function(item) {
+    var href = item.getAttribute('href');
+    if (href && href.startsWith('#')) {
+      navMap[href.slice(1)] = item;
+    }
+  });
+
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        // Remove active from all
+        navItems.forEach(function(item) { item.classList.remove('active'); });
+        // Add active to matching
+        var link = navMap[entry.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, {
+    rootMargin: '-10% 0px -80% 0px',
+    threshold: 0
+  });
+
+  sections.forEach(function(section) {
+    observer.observe(section);
+  });
+
+  // Set first item active on load
+  if (navItems.length > 0) {
+    navItems[0].classList.add('active');
+  }
+})();
+</script>
+</body>
+</html>
