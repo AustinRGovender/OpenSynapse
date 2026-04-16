@@ -80,7 +80,21 @@ jobs:
           context: .
           file: deploy/docker/Dockerfile.control-plane
           push: false
+          load: true
           tags: opensynapse/control-plane:ci
+
+      # Guard against ADR-0007 regressions: the control-plane image MUST ship
+      # a k6 binary on PATH with the xk6-kv extension baked in, otherwise
+      # /runs returns ENGINE_NOT_AVAILABLE and live control cannot work.
+      - name: Verify bundled k6 and xk6-kv
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint k6 opensynapse/control-plane:ci version > k6-version.txt
+          cat k6-version.txt
+          grep -q "xk6-kv" k6-version.txt || {
+            echo "::error::k6 binary in control-plane image is missing the xk6-kv extension (see docs/decisions/0007-k6-xk6-kv-bundled-in-control-plane-image.md)"
+            exit 1
+          }
 
       - name: Build web image
         uses: docker/build-push-action@v6

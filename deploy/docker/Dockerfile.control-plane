@@ -6,9 +6,18 @@ RUN go mod download 2>/dev/null || true
 COPY apps/control-plane/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /opensynapse-control ./cmd/server
 
+# Build k6 with the xk6-kv extension baked in.
+# Required by the live-control design (externally-controlled executor + xk6-kv
+# token bucket). See docs/decisions/0007-k6-xk6-kv-bundled-in-control-plane-image.md.
+FROM golang:1.25-alpine AS k6-builder
+RUN apk add --no-cache git
+RUN go install go.k6.io/xk6/cmd/xk6@latest
+RUN xk6 build --with github.com/oleiade/xk6-kv --output /k6
+
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates chromium nss freetype harfbuzz
 ENV ROD_BROWSER_BIN=/usr/bin/chromium-browser
+COPY --from=k6-builder /k6 /usr/local/bin/k6
 COPY --from=builder /opensynapse-control /usr/local/bin/opensynapse-control
 EXPOSE 8090
 ENTRYPOINT ["opensynapse-control"]

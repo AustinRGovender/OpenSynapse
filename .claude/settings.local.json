@@ -17,7 +17,9 @@
       "Bash(pnpm --version)",
       "Bash(go version:*)",
       "Bash(go build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(docker run:*)"
     ]
   }
 }
