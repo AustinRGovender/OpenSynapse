@@ -106,6 +106,73 @@ const initialMetrics = {
   activeVUs: [] as TimeSeriesPoint[],
 }
 
+// --- Snake-to-camel normalisers at the API boundary ---
+//
+// The control plane serialises summaries and metric snapshots in snake_case
+// (e.g. `total_requests`, `p95_ms`, `timestamp_ms`). The TS interfaces above
+// are camelCase. Without translation, every camelCase field resolves to
+// `undefined`, and `p95.toFixed(1)` / `errorRate.toFixed(2)` in RunView
+// throws as soon as the first WS tick arrives — React unmounts the tree
+// and the run screen goes blank. Normalising at the store boundary keeps
+// the rest of the app working against a single idiomatic shape.
+
+type ApiRunSummary = Partial<{
+  total_requests: number
+  failed_requests: number
+  error_rate: number
+  throughput_rps: number
+  p95_ms: number
+  max_ms: number
+  // camelCase variants are passed through unchanged when already present
+  totalRequests: number
+  failed: number
+  errorRate: number
+  avgRps: number
+  p95: number
+  peakVUs: number
+}>
+
+function normaliseSummary(raw: ApiRunSummary | null | undefined): RunSummary | null {
+  if (!raw) return null
+  return {
+    totalRequests: raw.totalRequests ?? raw.total_requests ?? 0,
+    failed: raw.failed ?? raw.failed_requests ?? 0,
+    errorRate: raw.errorRate ?? raw.error_rate ?? 0,
+    avgRps: raw.avgRps ?? raw.throughput_rps ?? 0,
+    p95: raw.p95 ?? raw.p95_ms ?? 0,
+    // The server does not currently expose peak VUs; fall back to 0 so the
+    // UI never renders `undefined.toFixed(...)`.
+    peakVUs: raw.peakVUs ?? 0,
+  }
+}
+
+function normaliseRun(raw: Record<string, unknown>): Run {
+  const summary = raw['summary'] as ApiRunSummary | null | undefined
+  return { ...(raw as unknown as Run), summary: normaliseSummary(summary) }
+}
+
+type ApiMetricSnapshot = Partial<{
+  timestamp: number
+  timestamp_ms: number
+  rps: number
+  p95: number
+  p95_ms: number
+  errorRate: number
+  error_rate: number
+  activeVUs: number
+  active_vus: number
+}>
+
+function normaliseSnapshot(raw: ApiMetricSnapshot): MetricSnapshot {
+  return {
+    timestamp: raw.timestamp ?? raw.timestamp_ms ?? 0,
+    rps: raw.rps ?? 0,
+    p95: raw.p95 ?? raw.p95_ms ?? 0,
+    errorRate: raw.errorRate ?? raw.error_rate ?? 0,
+    activeVUs: raw.activeVUs ?? raw.active_vus ?? 0,
+  }
+}
+
 export const useRunStore = create<RunState>((set, get) => ({
   run: null,
   metrics: { ...initialMetrics },
@@ -127,7 +194,7 @@ export const useRunStore = create<RunState>((set, get) => ({
         set({ loading: false })
         return
       }
-      const run: Run = await res.json()
+      const run = normaliseRun(await res.json())
       set({ run, loading: false })
     } catch {
       set({ loading: false })
@@ -146,7 +213,10 @@ export const useRunStore = create<RunState>((set, get) => ({
       const res = await fetch(`/api/v1/runs${qs ? '?' + qs : ''}`)
       if (res.ok) {
         const data = await res.json()
-        const items: RunWithPlanName[] = data.items ?? []
+        const rawItems: Record<string, unknown>[] = data.items ?? []
+        const items: RunWithPlanName[] = rawItems.map(
+          (raw) => normaliseRun(raw) as RunWithPlanName,
+        )
         set({
           runsList: items,
           runsListLoading: false,
@@ -176,7 +246,10 @@ export const useRunStore = create<RunState>((set, get) => ({
       const res = await fetch(`/api/v1/runs${qs ? '?' + qs : ''}`)
       if (res.ok) {
         const data = await res.json()
-        const items: RunWithPlanName[] = data.items ?? []
+        const rawItems: Record<string, unknown>[] = data.items ?? []
+        const items: RunWithPlanName[] = rawItems.map(
+          (raw) => normaliseRun(raw) as RunWithPlanName,
+        )
         set({
           runsList: [...get().runsList, ...items],
           runsListLoading: false,
@@ -198,7 +271,7 @@ export const useRunStore = create<RunState>((set, get) => ({
         ids.map(async (id) => {
           const res = await fetch(`/api/v1/runs/${id}`)
           if (!res.ok) return null
-          return (await res.json()) as RunWithPlanName
+          return normaliseRun(await res.json()) as RunWithPlanName
         }),
       )
       set({
@@ -234,8 +307,11 @@ export const useRunStore = create<RunState>((set, get) => ({
         try {
           const msg = JSON.parse(event.data)
           if (msg.type === 'event' && msg.channel === `runs.${runId}.metrics`) {
-            const payload = msg.payload as MetricSnapshot
-            get().appendMetrics(payload)
+            // Server payload is MetricSnapshot with snake_case JSON tags
+            // (`timestamp_ms`, `p95_ms`, `error_rate`, `active_vus`).
+            // Normalise before appending so `.toFixed(...)` downstream never
+            // sees `undefined` from a raw snake_case field.
+            get().appendMetrics(normaliseSnapshot(msg.payload as ApiMetricSnapshot))
           }
           if (msg.type === 'event' && msg.channel === `runs.${runId}.events`) {
             get().addEvent(msg.payload as RunEvent)
