@@ -983,11 +983,39 @@ func sanitizeJSString(s string) string {
 }
 
 // sanitizeVarName converts a node ID to a valid JS variable name fragment.
+//
+// Node IDs in OpenSynapse are plan-author or generator controlled, and can
+// contain arbitrary printable characters — crawler-generated IDs often embed
+// full URLs (e.g. "req-GET-https://example.com/a/b"). The output is always
+// substituted into a bare JS identifier position (`let params_<X>`,
+// `let res_<X>`, `const <X>`), so any character outside the ECMAScript
+// IdentifierPart grammar would produce an unparseable script and the k6
+// subprocess would exit immediately. Everything non-[A-Za-z0-9_$] is mapped
+// to '_', and a leading digit is prefixed with '_' to avoid identifiers like
+// `123foo` that would also fail to parse.
+//
+// Regression coverage: see TestSanitizeVarName in compiler_test.go.
 func sanitizeVarName(s string) string {
-	s = strings.ReplaceAll(s, "-", "_")
-	s = strings.ReplaceAll(s, ".", "_")
-	s = strings.ReplaceAll(s, " ", "_")
-	return s
+	if s == "" {
+		return "_"
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r == '_', r == '$':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			if i == 0 {
+				// Identifiers cannot start with a digit.
+				b.WriteByte('_')
+			}
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 // resolveVarRefs replaces ${VAR} references with JS template literal syntax.

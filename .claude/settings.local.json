@@ -19,7 +19,8 @@
       "Bash(go build:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(docker run:*)"
+      "Bash(docker run:*)",
+      "Bash(curl -s http://localhost:8080/api/v1/runs/eeb923d6-e7a5-4218-89f3-c2eb15c23db6)"
     ]
   }
 }

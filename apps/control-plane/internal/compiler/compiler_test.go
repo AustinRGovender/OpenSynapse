@@ -200,7 +200,7 @@ func TestCompileRootTypeMismatch(t *testing.T) {
 			Type:       "http",
 			Name:       "Not a plan",
 			Enabled:    true,
-			Properties: json.RawMessage(`{"method":"GET","url":"http://example.com","body":{"type":"none"}}`),
+			Properties: json.RawMessage(`{"method":"GET","url":"http://example.com","body":{"type":"none"},"follow_redirects":true}`),
 		},
 	}
 
@@ -759,5 +759,134 @@ func TestEmitWebSocket(t *testing.T) {
 	}
 	if !strings.Contains(script, "socket.on('message'") {
 		t.Error("expected message handler for expected_messages")
+	}
+}
+
+// TestSanitizeVarName covers the identifier sanitiser used to turn node IDs
+// into JS variable name fragments. The crawler (see internal/crawler) mints
+// IDs like "req-GET-https://example.com/a" that embed full URLs; before this
+// was tightened, those IDs produced scripts like
+//
+//	let params_req_GET_https://example_com/a = { ... }
+//
+// which k6 rejected with a parse error, causing every run to fail within
+// ~200ms with empty summary stats. This test pins the sanitiser to emit a
+// valid ECMAScript identifier for every node ID we have seen in the wild.
+func TestSanitizeVarName(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"crawler URL-bearing ID", "req-GET-https://dogapi.dog/", "req_GET_https___dogapi_dog_"},
+		{"nested path", "req-GET-https://example.com/a/b", "req_GET_https___example_com_a_b"},
+		{"leading digit", "1node", "_1node"},
+		{"only digits", "123", "_123"},
+		{"dollar and underscore preserved", "$foo_bar", "$foo_bar"},
+		{"spaces replaced", "my node 42", "my_node_42"},
+		{"dots and dashes replaced", "a.b-c", "a_b_c"},
+		{"colon replaced", "req:GET:/path", "req_GET__path"},
+		{"query and fragment chars replaced", "req?k=v&x=y#f", "req_k_v_x_y_f"},
+		{"empty string is safe", "", "_"},
+		{"already valid identifier untouched", "foo_Bar123", "foo_Bar123"},
+	}
+
+	// Shape check: every output must be a valid JS IdentifierName
+	// (non-empty; first rune in [A-Za-z_$]; rest in [A-Za-z0-9_$]).
+	validIdentifier := func(s string) bool {
+		if s == "" {
+			return false
+		}
+		for i, r := range s {
+			switch {
+			case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r == '_', r == '$':
+				// ok at any position
+			case r >= '0' && r <= '9':
+				if i == 0 {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+		return true
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizeVarName(tc.in)
+			if got != tc.want {
+				t.Errorf("sanitizeVarName(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+			if !validIdentifier(got) {
+				t.Errorf("sanitizeVarName(%q) = %q is not a valid JS identifier", tc.in, got)
+			}
+		})
+	}
+}
+
+// TestCompileCrawlerPlanProducesParseableScript is an end-to-end regression
+// test for the sanitiser: a minimal crawler-shaped plan (node IDs embed full
+// URLs) must compile into a script whose `let params_…` / `let res_…` lines
+// are valid JS. Before the fix in sanitizeVarName, the k6 subprocess exited
+// with `Unexpected token :` on exactly this input.
+func TestCompileCrawlerPlanProducesParseableScript(t *testing.T) {
+	plan := &db.Plan{
+		ID:   "test-crawler-plan",
+		Name: "crawler",
+		Root: db.Node{
+			ID: "root", Type: "plan", Name: "root", Enabled: true,
+			Children: []db.Node{
+				{
+					ID: "scenario-crawl", Type: "scenario", Name: "Crawl", Enabled: true,
+					Properties: json.RawMessage(`{"executor":"constant-vus","vus":1,"duration":"5s"}`),
+					Children: []db.Node{
+						{
+							ID: "req-GET-https://dogapi.dog/", Type: "http",
+							Name: "GET https://dogapi.dog/", Enabled: true,
+							Properties: json.RawMessage(`{"method":"GET","url":"https://dogapi.dog/","body":{"type":"none"},"follow_redirects":true}`),
+						},
+						{
+							ID: "req-GET-https://dogapi.dog/docs/api-v2", Type: "http",
+							Name: "GET https://dogapi.dog/docs/api-v2", Enabled: true,
+							Properties: json.RawMessage(`{"method":"GET","url":"https://dogapi.dog/docs/api-v2","body":{"type":"none"},"follow_redirects":true}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	script, err := Compile(plan)
+	if err != nil {
+		t.Fatalf("Compile() error: %v", err)
+	}
+
+	// The compiled output must not contain any of the stray characters that
+	// used to leak through into identifier positions.
+	badMarkers := []string{
+		"params_req_GET_https://",
+		"res_req_GET_https://",
+		"params_req_GET_https_:",
+		"= http.get('https://dogapi.dog/', params_req_GET_https://",
+	}
+	for _, m := range badMarkers {
+		if strings.Contains(script, m) {
+			t.Errorf("script still contains invalid identifier fragment %q", m)
+		}
+	}
+
+	// And the positive shape: both params and res identifiers for each URL
+	// are emitted as underscore-only sequences.
+	mustContain := []string{
+		"let params_req_GET_https___dogapi_dog_ =",
+		"http.get('https://dogapi.dog/', params_req_GET_https___dogapi_dog_)",
+		"let params_req_GET_https___dogapi_dog_docs_api_v2 =",
+		"http.get('https://dogapi.dog/docs/api-v2', params_req_GET_https___dogapi_dog_docs_api_v2)",
+	}
+	for _, m := range mustContain {
+		if !strings.Contains(script, m) {
+			t.Errorf("expected script to contain %q\n---script---\n%s", m, script)
+		}
 	}
 }
