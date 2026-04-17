@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { usePlanStore } from '../../stores/plan-store'
 import { NodeTree } from './NodeTree'
 import { FlowCanvas } from './FlowCanvas'
 import { PropertyPanel } from './PropertyPanel'
 import { FragmentLibrary } from '../fragments/FragmentLibrary'
+import { RunConfigDialog, type RunParameters } from '../run-config/RunConfigDialog'
 
 type RunStatus = 'idle' | 'starting' | 'error'
 
@@ -20,15 +21,34 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
   const [scriptLoading, setScriptLoading] = useState(false)
   const [runStatus, setRunStatus] = useState<RunStatus>('idle')
   const [showFragments, setShowFragments] = useState(false)
+  const [showRunConfig, setShowRunConfig] = useState(false)
 
-  const handleStartRun = useCallback(async () => {
+  // Extract scenario properties from the plan's first scenario child node
+  const planScenarioProperties = useMemo(() => {
+    if (!plan?.root?.children) return null
+    const scenarioNode = plan.root.children.find(
+      (c: { type: string }) => c.type === 'scenario',
+    )
+    return (scenarioNode?.properties as Record<string, unknown>) ?? null
+  }, [plan])
+
+  const handleStartRun = useCallback(async (params?: RunParameters) => {
     if (!plan) return
+    setShowRunConfig(false)
     setRunStatus('starting')
     try {
+      const body: Record<string, unknown> = { plan_id: plan.id }
+      if (params) {
+        body.parameters = {
+          vus_target: params.vus_target,
+          duration_seconds: params.duration_seconds,
+          ...(params.rps_target !== undefined && { rps_target: params.rps_target }),
+        }
+      }
       const res = await fetch('/api/v1/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: plan.id }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         const run = await res.json()
@@ -151,7 +171,7 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
             Show Script
           </button>
           <button
-            onClick={handleStartRun}
+            onClick={() => setShowRunConfig(true)}
             disabled={runStatus === 'starting'}
             className={`rounded px-3 py-1 text-xs font-medium text-white ${
               runStatus === 'error'
@@ -208,6 +228,13 @@ export function PlanBuilder({ planId, onBack }: PlanBuilderProps) {
           )}
         </div>
       </div>
+
+      <RunConfigDialog
+        open={showRunConfig}
+        onClose={() => setShowRunConfig(false)}
+        onConfirm={handleStartRun}
+        planScenarioProperties={planScenarioProperties}
+      />
     </div>
   )
 }

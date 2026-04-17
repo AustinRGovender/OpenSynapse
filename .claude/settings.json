@@ -3,46 +3,54 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "command": "bash scripts/dev/hooks/check-secrets.sh \"$TOOL_INPUT\"",
-        "description": "Secret scanner — blocks commits containing API keys or credentials"
-      },
-      {
-        "matcher": "Bash",
-        "command": "bash scripts/dev/hooks/block-dangerous.sh \"$TOOL_INPUT\"",
-        "description": "Dangerous command blocker — prevents rm -rf, force push to main, etc."
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/check-secrets.sh \"$TOOL_INPUT\""
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/block-dangerous.sh \"$TOOL_INPUT\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "command": "bash scripts/dev/hooks/lint-file.sh \"$TOOL_INPUT\"",
-        "description": "Post-write linter — runs ESLint, gofmt, or rustfmt based on file type"
-      },
-      {
-        "matcher": "Write|Edit",
-        "command": "bash scripts/dev/hooks/typecheck-file.sh \"$TOOL_INPUT\"",
-        "description": "Post-write type checker — runs tsc or go build for changed package"
-      },
-      {
-        "matcher": "Write|Edit",
-        "command": "bash scripts/dev/hooks/test-related.sh \"$TOOL_INPUT\"",
-        "description": "Post-write test runner — runs tests related to the changed file"
-      },
-      {
-        "matcher": "Write|Edit",
-        "command": "bash scripts/dev/hooks/check-hex-colours.sh \"$TOOL_INPUT\"",
-        "description": "Hex colour guard — blocks hex colours in component files outside tokens.ts"
-      },
-      {
-        "matcher": "Write|Edit",
-        "command": "bash scripts/dev/hooks/check-openapi-drift.sh \"$TOOL_INPUT\"",
-        "description": "OpenAPI drift guard — warns when TypeScript API client is stale"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/lint-file.sh \"$TOOL_INPUT\""
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/typecheck-file.sh \"$TOOL_INPUT\""
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/test-related.sh \"$TOOL_INPUT\""
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/check-hex-colours.sh \"$TOOL_INPUT\""
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/check-openapi-drift.sh \"$TOOL_INPUT\""
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
       {
-        "command": "bash scripts/dev/hooks/context-loader.sh",
-        "description": "Context loader — injects current phase from docs/progress.md"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/dev/hooks/context-loader.sh"
+          }
+        ]
       }
     ]
   }

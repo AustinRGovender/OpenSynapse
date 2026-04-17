@@ -319,7 +319,17 @@ export const useRunStore = create<RunState>((set, get) => ({
           if (msg.type === 'event' && msg.channel === `runs.${runId}.status`) {
             const run = get().run
             if (run) {
-              set({ run: { ...run, ...msg.payload } })
+              const updated = { ...run, ...msg.payload }
+              // Freeze ended_at on terminal states so duration calculation stops
+              const terminalStates = ['completed', 'failed', 'cancelled']
+              if (terminalStates.includes(updated.status) && !updated.ended_at) {
+                updated.ended_at = new Date().toISOString()
+              }
+              set({ run: updated })
+              // Disconnect WebSocket after short delay to allow final metrics to arrive
+              if (terminalStates.includes(updated.status)) {
+                setTimeout(() => get().disconnectWebSocket(), 2000)
+              }
             }
           }
         } catch {

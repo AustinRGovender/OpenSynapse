@@ -5,6 +5,7 @@ import type { Run, TimeSeriesPoint, RunEvent } from '../../stores/run-store'
 import { MetricCard } from './MetricCard'
 import { LiveChart } from './LiveChart'
 import { LiveControlPanel } from './LiveControlPanel'
+import { RunCompletionBanner } from './RunCompletionBanner'
 import { AnalyseButton } from '../ai/AnalyseButton'
 import { AIInsightsPanel } from '../ai/AIInsightsPanel'
 
@@ -385,6 +386,17 @@ export function RunView({ runId, onBack }: RunViewProps) {
   const activeVUs = summary?.peakVUs ?? lastVUs
 
   const isRunning = run.status === 'running' || run.status === 'pending'
+  const isTerminal = run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled'
+
+  // Live duration timer — ticks every second while running, freezes on ended_at
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!isRunning) return
+    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [isRunning])
+
+  const liveDuration = formatDuration(run.started_at, run.ended_at)
 
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
@@ -403,21 +415,45 @@ export function RunView({ runId, onBack }: RunViewProps) {
         >
           {run.status}
         </span>
-        {isRunning && (
-          <span className="text-xs text-slate-500">
-            {formatDuration(run.started_at, run.ended_at)}
-          </span>
-        )}
+        <span className="text-xs text-slate-500">{liveDuration}</span>
         <div className="ml-auto flex items-center gap-3">
           <AnalyseButton runId={runId} />
           <ExportDropdown run={run} metrics={metrics} events={events} />
           <span
-            className={`flex items-center gap-1.5 text-xs ${wsConnected ? 'text-teal-400' : 'text-slate-600'}`}
+            className={`flex items-center gap-1.5 text-xs ${
+              isTerminal
+                ? run.status === 'completed'
+                  ? 'text-green-400'
+                  : run.status === 'failed'
+                    ? 'text-red-400'
+                    : 'text-slate-400'
+                : wsConnected
+                  ? 'text-teal-400'
+                  : 'text-slate-600'
+            }`}
           >
             <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${wsConnected ? 'bg-teal-400' : 'bg-slate-600'}`}
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                isTerminal
+                  ? run.status === 'completed'
+                    ? 'bg-green-400'
+                    : run.status === 'failed'
+                      ? 'bg-red-400'
+                      : 'bg-slate-400'
+                  : wsConnected
+                    ? 'bg-teal-400'
+                    : 'bg-slate-600'
+              }`}
             />
-            {wsConnected ? 'Live' : 'Disconnected'}
+            {isTerminal
+              ? run.status === 'completed'
+                ? 'Complete'
+                : run.status === 'failed'
+                  ? 'Failed'
+                  : 'Cancelled'
+              : wsConnected
+                ? 'Live'
+                : 'Disconnected'}
           </span>
         </div>
       </div>
@@ -426,18 +462,22 @@ export function RunView({ runId, onBack }: RunViewProps) {
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 overflow-auto px-6 py-6">
+          {/* Completion banner */}
+          {isTerminal && <RunCompletionBanner run={run} duration={liveDuration} />}
+
           {/* Metric cards strip */}
           <div className="grid grid-cols-6 gap-3">
-            <MetricCard label="Total Requests" value={Math.round(totalRequests).toLocaleString()} />
-            <MetricCard label="Failed" value={Math.round(failed).toLocaleString()} alert={failed > 0} />
+            <MetricCard label="Total Requests" value={Math.round(totalRequests).toLocaleString()} frozen={!isRunning} />
+            <MetricCard label="Failed" value={Math.round(failed).toLocaleString()} alert={failed > 0} frozen={!isRunning} />
             <MetricCard
               label="Error Rate"
               value={`${errorRate.toFixed(2)}%`}
               alert={errorRate > 0}
+              frozen={!isRunning}
             />
-            <MetricCard label="Throughput RPS" value={rps.toFixed(1)} />
-            <MetricCard label="p95 ms" value={p95.toFixed(1)} />
-            <MetricCard label="Active VUs" value={Math.round(activeVUs)} />
+            <MetricCard label="Throughput RPS" value={rps.toFixed(1)} frozen={!isRunning} />
+            <MetricCard label="p95 ms" value={p95.toFixed(1)} frozen={!isRunning} />
+            <MetricCard label="Active VUs" value={Math.round(activeVUs)} frozen={!isRunning} />
           </div>
 
           {/* Charts 2x2 grid */}
@@ -448,6 +488,7 @@ export function RunView({ runId, onBack }: RunViewProps) {
               color="#14b8a6"
               type="line"
               yLabel="rps"
+              isRunning={isRunning}
             />
             <LiveChart
               title="Response Time p95"
@@ -455,6 +496,7 @@ export function RunView({ runId, onBack }: RunViewProps) {
               color="#a78bfa"
               type="line"
               yLabel="ms"
+              isRunning={isRunning}
             />
             <LiveChart
               title="Error Rate"
@@ -462,6 +504,7 @@ export function RunView({ runId, onBack }: RunViewProps) {
               color="#f87171"
               type="area"
               yLabel="%"
+              isRunning={isRunning}
             />
             <LiveChart
               title="Active Virtual Users"
@@ -469,6 +512,7 @@ export function RunView({ runId, onBack }: RunViewProps) {
               color="#38bdf8"
               type="step"
               yLabel="VUs"
+              isRunning={isRunning}
             />
           </div>
 

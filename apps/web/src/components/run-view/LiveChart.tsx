@@ -8,6 +8,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
 } from 'recharts'
 import type { TimeSeriesPoint } from '../../stores/run-store'
 
@@ -17,6 +18,7 @@ interface LiveChartProps {
   color: string
   type: 'line' | 'area' | 'step'
   yLabel: string
+  isRunning?: boolean
 }
 
 function formatTime(epoch: number): string {
@@ -44,8 +46,11 @@ function CustomTooltip({
   )
 }
 
-export function LiveChart({ title, data, color, type, yLabel }: LiveChartProps) {
+export function LiveChart({ title, data, color, type, yLabel, isRunning = true }: LiveChartProps) {
   const ChartComponent = type === 'area' ? AreaChart : LineChart
+  const lastTime = data.length > 0 ? data[data.length - 1].time : undefined
+
+  const emptyMessage = isRunning ? 'Waiting for data...' : 'No data recorded'
 
   return (
     <div className="flex flex-col rounded-lg border border-slate-800 bg-slate-900 p-4">
@@ -56,7 +61,7 @@ export function LiveChart({ title, data, color, type, yLabel }: LiveChartProps) 
       <div className="h-48 w-full">
         {data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-slate-600">
-            Waiting for data...
+            {emptyMessage}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -102,6 +107,14 @@ export function LiveChart({ title, data, color, type, yLabel }: LiveChartProps) 
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
+                />
+              )}
+              {!isRunning && lastTime !== undefined && (
+                <ReferenceLine
+                  x={lastTime}
+                  stroke="#94a3b8"
+                  strokeDasharray="4 4"
+                  label={{ value: 'End', position: 'top', fill: '#94a3b8', fontSize: 11 }}
                 />
               )}
             </ChartComponent>
