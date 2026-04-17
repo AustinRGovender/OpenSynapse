@@ -51,8 +51,9 @@ func TestPlanCRUD(t *testing.T) {
 	resp.Body.Close()
 
 	items := listResult["items"].([]interface{})
-	if len(items) != 1 {
-		t.Fatalf("list: expected 1 item, got %d", len(items))
+	// 6 built-in plans + 1 user-created plan
+	if len(items) != 7 {
+		t.Fatalf("list: expected 7 items (6 built-in + 1 user), got %d", len(items))
 	}
 
 	// Get
@@ -205,6 +206,108 @@ func TestPlanNotFound(t *testing.T) {
 
 	if errResp.Error.Code != "PLAN_NOT_FOUND" {
 		t.Fatalf("expected PLAN_NOT_FOUND, got %q", errResp.Error.Code)
+	}
+}
+
+func TestPlanCannotDeleteBuiltIn(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	// List to get a built-in plan ID
+	req, _ := http.NewRequest("GET", ts.URL()+"/api/v1/plans", nil)
+	resp := ts.Do(req)
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	items := result["items"].([]interface{})
+	builtInID := ""
+	for _, item := range items {
+		plan := item.(map[string]interface{})
+		if plan["built_in"] == true {
+			builtInID = plan["id"].(string)
+			break
+		}
+	}
+
+	if builtInID == "" {
+		t.Fatal("no built-in plan found")
+	}
+
+	// Try to delete
+	req, _ = http.NewRequest("DELETE", ts.URL()+"/api/v1/plans/"+builtInID, nil)
+	resp = ts.Do(req)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("delete built-in: expected 403, got %d", resp.StatusCode)
+	}
+
+	var errResp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	json.NewDecoder(resp.Body).Decode(&errResp)
+	resp.Body.Close()
+
+	if errResp.Error.Code != "CANNOT_DELETE_BUILTIN" {
+		t.Fatalf("expected CANNOT_DELETE_BUILTIN, got %q", errResp.Error.Code)
+	}
+}
+
+func TestPlanCannotUpdateBuiltIn(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	// List to get a built-in plan ID
+	req, _ := http.NewRequest("GET", ts.URL()+"/api/v1/plans", nil)
+	resp := ts.Do(req)
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	items := result["items"].([]interface{})
+	builtInID := ""
+	for _, item := range items {
+		plan := item.(map[string]interface{})
+		if plan["built_in"] == true {
+			builtInID = plan["id"].(string)
+			break
+		}
+	}
+
+	if builtInID == "" {
+		t.Fatal("no built-in plan found")
+	}
+
+	// Try to update
+	updateBody := `{"name":"Hacked","description":"Hacked","tags":[],"root":{"id":"r","type":"plan","name":"r","enabled":true,"properties":{},"children":[]}}`
+	req, _ = http.NewRequest("PUT", ts.URL()+"/api/v1/plans/"+builtInID, bytes.NewBufferString(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp = ts.Do(req)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("update built-in: expected 403, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+func TestPlanListShowsBuiltInFirst(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	req, _ := http.NewRequest("GET", ts.URL()+"/api/v1/plans", nil)
+	resp := ts.Do(req)
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+
+	items := result["items"].([]interface{})
+	if len(items) < 6 {
+		t.Fatalf("expected at least 6 built-in plans, got %d", len(items))
+	}
+
+	// Verify first item is built-in
+	first := items[0].(map[string]interface{})
+	if first["built_in"] != true {
+		t.Fatal("expected first plan to be built-in")
 	}
 }
 

@@ -56,6 +56,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	fragmentStore := db.NewFragmentStore(database)
 	fragmentStore.SeedBuiltInFragments()
 	fragmentHandlers := handlers.NewFragmentHandlers(fragmentStore)
+	planStore.SeedBuiltInPlans()
 	importHandlers := handlers.NewImportHandlers(planStore)
 	ws := wsserver.New()
 

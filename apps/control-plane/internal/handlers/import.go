@@ -44,7 +44,7 @@ func (h *ImportHandlers) ImportJMX(w http.ResponseWriter, r *http.Request) {
 
 	// Save the plan
 	plan := result.Plan
-	saved, saveErr := h.plans.Create(plan.Name, plan.Description, plan.Tags, plan.Root, nil)
+	saved, saveErr := h.plans.Create(plan.Name, plan.Description, plan.Tags, plan.Root, nil, false)
 	if saveErr != nil {
 		internalError(w, saveErr)
 		return

@@ -1,0 +1,201 @@
+openapi: 3.0.3
+info:
+  title: Error Generator API
+  description: |
+    API service for testing various error scenarios including random errors,
+    rate limiting, and progressive service degradation.
+  version: 1.0.0
+  contact:
+    name: IHAPerf Testing Tools
+servers:
+  - url: http://localhost:9004
+    description: Local development server
+  - url: http://error-api:9004
+    description: Docker internal network
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the Error Generator API service
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: Error Generator API
+
+  /random-error:
+    get:
+      summary: Random error generator
+      description: |
+        Returns a random HTTP error status code from the following pool:
+        400, 401, 403, 404, 429, 500, 502, 503, 504
+      operationId: randomError
+      tags:
+        - Errors
+      responses:
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Bad Gateway
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Gateway Timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /rate-limit:
+    get:
+      summary: Rate limiting simulation
+      description: |
+        Simulates rate limiting by allowing 100 requests per 10-second window.
+        After 100 requests, returns 429 status code until the window resets.
+        Counter resets every 10 seconds.
+      operationId: rateLimit
+      tags:
+        - Rate Limiting
+      responses:
+        '200':
+          description: Request accepted (under limit)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: OK
+                  requests:
+                    type: integer
+                    description: Number of requests in current window
+                    example: 42
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Rate limit exceeded
+
+  /degradation:
+    get:
+      summary: Progressive service degradation
+      description: |
+        Simulates progressive service degradation under load:
+        - Response time increases with each request (10ms per request, max 5s)
+        - After 50 requests, 30% chance of returning 500 error
+        - Counter resets every 10 seconds
+      operationId: degradation
+      tags:
+        - Degradation
+      responses:
+        '200':
+          description: Successful response (with increasing delay)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: OK
+                  request_num:
+                    type: integer
+                    description: Request number in current window
+                    example: 25
+                  delay_ms:
+                    type: integer
+                    description: Artificial delay added (in milliseconds)
+                    example: 250
+        '500':
+          description: Service degraded error (30% chance after 50 requests)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Service degraded
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Random error 500
+        status_code:
+          type: integer
+          example: 500
+
+tags:
+  - name: Health
+    description: Service health monitoring
+  - name: Errors
+    description: Random error generation
+  - name: Rate Limiting
+    description: Rate limit testing
+  - name: Degradation
+    description: Service degradation simulation

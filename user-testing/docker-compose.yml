@@ -1,0 +1,31 @@
+include:
+  - path: ../deploy/docker/docker-compose.yml
+
+services:
+  echo-api:
+    build:
+      context: ./test-apis/echo-api
+    ports:
+      - "9001:9001"
+    restart: unless-stopped
+
+  mock-ecommerce:
+    build:
+      context: ./test-apis/mock-ecommerce
+    ports:
+      - "9002:9002"
+    restart: unless-stopped
+
+  slow-api:
+    build:
+      context: ./test-apis/slow-api
+    ports:
+      - "9003:9003"
+    restart: unless-stopped
+
+  error-api:
+    build:
+      context: ./test-apis/error-api
+    ports:
+      - "9004:9004"
+    restart: unless-stopped

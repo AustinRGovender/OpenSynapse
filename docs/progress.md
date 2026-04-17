@@ -16,3 +16,4 @@
 | 10    | Cluster mode and distributed execution   | complete    | 2026-04-15 | 2026-04-15 | 68 tests pass, Helm lint passes |
 | 11    | JMeter import, Docker polish, and release| complete    | 2026-04-15 | 2026-04-15 | 72 tests pass, JMX import verified |
 | 12    | Multi-engine crawler                     | complete    | 2026-04-15 | 2026-04-15 | 116 tests pass, Rod/Colly/ZAP engines working |
+| 13    | User testing infrastructure + seed plans | complete    | 2026-04-17 | 2026-04-17 | 126 tests pass, k6 traffic verified against echo-api |

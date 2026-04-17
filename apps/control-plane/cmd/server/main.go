@@ -68,6 +68,7 @@ func main() {
 	fragmentStore := db.NewFragmentStore(database)
 	fragmentStore.SeedBuiltInFragments()
 	fragmentHandlers := handlers.NewFragmentHandlers(fragmentStore)
+	planStore.SeedBuiltInPlans()
 	importHandlers := handlers.NewImportHandlers(planStore)
 
 	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, fragmentHandlers, importHandlers, ws)

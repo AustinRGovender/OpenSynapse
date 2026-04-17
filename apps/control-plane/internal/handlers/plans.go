@@ -57,7 +57,7 @@ func (h *PlanHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := h.store.Create(req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID)
+	plan, err := h.store.Create(req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID, false)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -98,7 +98,11 @@ func (h *PlanHandlers) Update(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.store.Update(id, req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID)
 	if err != nil {
-		internalError(w, err)
+		if err.Error() == "cannot modify built-in plan" {
+			writeError(w, http.StatusForbidden, "CANNOT_MODIFY_BUILTIN", err.Error(), nil)
+		} else {
+			internalError(w, err)
+		}
 		return
 	}
 	if plan == nil {
@@ -113,7 +117,11 @@ func (h *PlanHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	if err := h.store.Delete(id); err != nil {
-		notFound(w, "PLAN", id)
+		if err.Error() == "cannot delete built-in plan" {
+			writeError(w, http.StatusForbidden, "CANNOT_DELETE_BUILTIN", err.Error(), nil)
+		} else {
+			notFound(w, "PLAN", id)
+		}
 		return
 	}
 

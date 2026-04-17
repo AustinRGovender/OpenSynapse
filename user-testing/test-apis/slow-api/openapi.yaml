@@ -1,0 +1,143 @@
+openapi: 3.0.3
+info:
+  title: Slow API
+  description: |
+    API service for testing slow responses, timeouts, and flaky behavior.
+    Useful for performance testing and timeout scenario validation.
+  version: 1.0.0
+  contact:
+    name: IHAPerf Testing Tools
+servers:
+  - url: http://localhost:9003
+    description: Local development server
+  - url: http://slow-api:9003
+    description: Docker internal network
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the Slow API service
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: Slow API
+
+  /slow/{seconds}:
+    get:
+      summary: Slow response endpoint
+      description: Returns a response after a specified delay in seconds (0-30)
+      operationId: slowResponse
+      tags:
+        - Delay
+      parameters:
+        - name: seconds
+          in: path
+          required: true
+          description: Delay in seconds (0-30)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 30
+            example: 5
+      responses:
+        '200':
+          description: Response after delay
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  delayed_seconds:
+                    type: integer
+                    example: 5
+                  timestamp:
+                    type: integer
+                    description: Unix timestamp
+                    example: 1698156000
+        '400':
+          description: Invalid seconds parameter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid seconds (0-30)
+
+  /timeout:
+    get:
+      summary: Timeout simulation
+      description: |
+        Deliberately delays response for 60 seconds to simulate timeout scenarios.
+        Most clients will timeout before receiving a response.
+      operationId: timeoutSimulation
+      tags:
+        - Timeout
+      responses:
+        '200':
+          description: Response after 60 seconds (usually times out)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: This should timeout
+
+  /flaky:
+    get:
+      summary: Flaky endpoint
+      description: |
+        Randomly returns either success or error (50/50 chance).
+        Useful for testing retry logic and error handling.
+        On error, adds random delay (0-5 seconds) before responding.
+      operationId: flakyEndpoint
+      tags:
+        - Flaky
+      responses:
+        '200':
+          description: Successful response (50% chance)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Success
+        '500':
+          description: Random failure (50% chance, with 0-5s delay)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Random failure
+
+tags:
+  - name: Health
+    description: Service health monitoring
+  - name: Delay
+    description: Controlled response delays
+  - name: Timeout
+    description: Timeout scenario testing
+  - name: Flaky
+    description: Unreliable endpoint simulation

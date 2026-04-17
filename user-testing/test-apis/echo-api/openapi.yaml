@@ -1,0 +1,220 @@
+openapi: 3.0.3
+info:
+  title: Echo API
+  description: |
+    A simple echo service for testing HTTP requests and responses.
+    Useful for validating request payloads, headers, and testing various response scenarios.
+  version: 1.0.0
+  contact:
+    name: IHAPerf Testing Tools
+servers:
+  - url: http://localhost:9001
+    description: Local development server
+  - url: http://echo-api:9001
+    description: Docker internal network
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the Echo API service
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: Echo API
+                  port:
+                    type: integer
+                    example: 9001
+
+  /echo:
+    post:
+      summary: Echo request body
+      description: Echoes back the request body along with timestamp, method, and headers
+      operationId: echoRequest
+      tags:
+        - Echo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              simple:
+                summary: Simple echo
+                value:
+                  message: "Hello, World!"
+              complex:
+                summary: Complex object
+                value:
+                  user:
+                    name: "John Doe"
+                    email: "john@example.com"
+                  data:
+                    values: [1, 2, 3]
+      responses:
+        '200':
+          description: Successfully echoed request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  echo:
+                    type: object
+                    additionalProperties: true
+                    description: The echoed request body
+                  timestamp:
+                    type: integer
+                    description: Unix timestamp
+                    example: 1698156000
+                  method:
+                    type: string
+                    example: POST
+                  headers:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+        '400':
+          description: Invalid JSON in request body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid JSON
+
+  /delay/{ms}:
+    get:
+      summary: Delayed response
+      description: Returns a response after a specified delay in milliseconds (max 10000ms)
+      operationId: delayedResponse
+      tags:
+        - Delay
+      parameters:
+        - name: ms
+          in: path
+          required: true
+          description: Delay in milliseconds (0-10000)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10000
+            example: 1000
+      responses:
+        '200':
+          description: Response after delay
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  delayed_ms:
+                    type: integer
+                    example: 1000
+                  timestamp:
+                    type: integer
+                    example: 1698156000
+        '400':
+          description: Invalid delay parameter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid delay parameter
+
+  /status/{code}:
+    get:
+      summary: Return specific status code
+      description: Returns a response with the specified HTTP status code (100-599)
+      operationId: customStatusCode
+      tags:
+        - Status
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: HTTP status code to return
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 599
+            example: 200
+      responses:
+        '200':
+          description: Status code 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '201':
+          description: Status code 201
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          description: Invalid status code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid status code
+        '404':
+          description: Status code 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '500':
+          description: Status code 500
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+components:
+  schemas:
+    StatusResponse:
+      type: object
+      properties:
+        status_code:
+          type: integer
+          example: 200
+        timestamp:
+          type: integer
+          example: 1698156000
+
+tags:
+  - name: Health
+    description: Service health monitoring
+  - name: Echo
+    description: Request echoing functionality
+  - name: Delay
+    description: Response delay simulation
+  - name: Status
+    description: HTTP status code testing

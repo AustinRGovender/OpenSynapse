@@ -140,7 +140,7 @@ func (c *compiler) emitScenario(node db.Node) error {
 	ob := c.options
 	ob.WriteString("export let options = {\n")
 	ob.WriteString("  scenarios: {\n")
-	ob.WriteString(fmt.Sprintf("    '%s': {\n", sanitizeJSString(node.Name)))
+	ob.WriteString(fmt.Sprintf("    '%s': {\n", sanitizeScenarioName(node.Name)))
 	ob.WriteString(fmt.Sprintf("      executor: '%s',\n", props.Executor))
 
 	switch props.Executor {
@@ -1013,6 +1013,27 @@ func sanitizeVarName(s string) string {
 			b.WriteRune(r)
 		default:
 			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+// sanitizeScenarioName converts a scenario name to a k6-compatible identifier.
+// k6 requires scenario names to contain only [a-zA-Z0-9_-].
+func sanitizeScenarioName(s string) string {
+	if s == "" {
+		return "default"
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteByte('-')
+		default:
+			b.WriteByte('-')
 		}
 	}
 	return b.String()

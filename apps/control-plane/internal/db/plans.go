@@ -27,6 +27,7 @@ type Plan struct {
 	UpdatedAt            time.Time `json:"updated_at"`
 	Version              int       `json:"version"`
 	DefaultEnvironmentID *string   `json:"default_environment_id"`
+	BuiltIn              bool      `json:"built_in"`
 	Root                 Node      `json:"root"`
 }
 
@@ -59,7 +60,7 @@ type ListResult[T any] struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
-func (s *PlanStore) Create(name, description string, tags []string, root Node, defaultEnvID *string) (*Plan, error) {
+func (s *PlanStore) Create(name, description string, tags []string, root Node, defaultEnvID *string, builtIn bool) (*Plan, error) {
 	id := uuid.New().String()
 	now := time.Now().UTC()
 
@@ -78,11 +79,15 @@ func (s *PlanStore) Create(name, description string, tags []string, root Node, d
 	}
 
 	nowStr := now.Format(time.RFC3339)
+	builtInInt := 0
+	if builtIn {
+		builtInInt = 1
+	}
 
 	_, err = s.db.Exec(
-		`INSERT INTO plans (id, name, description, tags, created_at, updated_at, version, default_environment_id, root)
-		 VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-		id, name, description, string(tagsJSON), nowStr, nowStr, defaultEnvID, string(rootJSON),
+		`INSERT INTO plans (id, name, description, tags, created_at, updated_at, version, default_environment_id, root, built_in)
+		 VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+		id, name, description, string(tagsJSON), nowStr, nowStr, defaultEnvID, string(rootJSON), builtInInt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert plan: %w", err)
@@ -102,6 +107,7 @@ func (s *PlanStore) Create(name, description string, tags []string, root Node, d
 		UpdatedAt:            now,
 		Version:              1,
 		DefaultEnvironmentID: defaultEnvID,
+		BuiltIn:              builtIn,
 		Root:                 root,
 	}, nil
 }
@@ -111,11 +117,12 @@ func (s *PlanStore) Get(id string) (*Plan, error) {
 	var tagsStr, rootStr string
 	var createdAt, updatedAt string
 	var envID sql.NullString
+	var builtInInt int
 
 	err := s.db.QueryRow(
-		`SELECT id, name, description, tags, created_at, updated_at, version, default_environment_id, root
+		`SELECT id, name, description, tags, created_at, updated_at, version, default_environment_id, root, built_in
 		 FROM plans WHERE id = ?`, id,
-	).Scan(&p.ID, &p.Name, &p.Description, &tagsStr, &createdAt, &updatedAt, &p.Version, &envID, &rootStr)
+	).Scan(&p.ID, &p.Name, &p.Description, &tagsStr, &createdAt, &updatedAt, &p.Version, &envID, &rootStr, &builtInInt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -132,6 +139,7 @@ func (s *PlanStore) Get(id string) (*Plan, error) {
 
 	p.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	p.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	p.BuiltIn = builtInInt == 1
 
 	if envID.Valid {
 		p.DefaultEnvironmentID = &envID.String
@@ -151,14 +159,14 @@ func (s *PlanStore) List(params ListParams) (*ListResult[Plan], error) {
 
 	if params.Cursor != "" {
 		rows, err = s.db.Query(
-			`SELECT id, name, description, tags, created_at, updated_at, version, default_environment_id, root
-			 FROM plans WHERE updated_at < ? ORDER BY updated_at DESC LIMIT ?`,
+			`SELECT id, name, description, tags, created_at, updated_at, version, default_environment_id, root, built_in
+			 FROM plans WHERE updated_at < ? ORDER BY built_in DESC, updated_at DESC LIMIT ?`,
 			params.Cursor, limit+1,
 		)
 	} else {
 		rows, err = s.db.Query(
-			`SELECT id, name, description, tags, created_at, updated_at, version, default_environment_id, root
-			 FROM plans ORDER BY updated_at DESC LIMIT ?`,
+			`SELECT id, name, description, tags, created_at, updated_at, version, default_environment_id, root, built_in
+			 FROM plans ORDER BY built_in DESC, updated_at DESC LIMIT ?`,
 			limit+1,
 		)
 	}
@@ -173,8 +181,9 @@ func (s *PlanStore) List(params ListParams) (*ListResult[Plan], error) {
 		var tagsStr, rootStr string
 		var createdAt, updatedAt string
 		var envID sql.NullString
+		var builtInInt int
 
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &tagsStr, &createdAt, &updatedAt, &p.Version, &envID, &rootStr); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &tagsStr, &createdAt, &updatedAt, &p.Version, &envID, &rootStr, &builtInInt); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
 		}
 
@@ -185,6 +194,7 @@ func (s *PlanStore) List(params ListParams) (*ListResult[Plan], error) {
 		json.Unmarshal([]byte(rootStr), &p.Root)
 		p.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		p.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+		p.BuiltIn = builtInInt == 1
 		if envID.Valid {
 			p.DefaultEnvironmentID = &envID.String
 		}
@@ -211,6 +221,9 @@ func (s *PlanStore) Update(id string, name, description string, tags []string, r
 	}
 	if existing == nil {
 		return nil, nil
+	}
+	if existing.BuiltIn {
+		return nil, fmt.Errorf("cannot modify built-in plan")
 	}
 
 	now := time.Now().UTC()
@@ -251,15 +264,21 @@ func (s *PlanStore) Update(id string, name, description string, tags []string, r
 }
 
 func (s *PlanStore) Delete(id string) error {
-	result, err := s.db.Exec("DELETE FROM plans WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("delete plan: %w", err)
-	}
-	n, _ := result.RowsAffected()
-	if n == 0 {
+	// Check if built-in
+	var builtIn int
+	err := s.db.QueryRow("SELECT built_in FROM plans WHERE id = ?", id).Scan(&builtIn)
+	if err == sql.ErrNoRows {
 		return fmt.Errorf("plan not found")
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if builtIn == 1 {
+		return fmt.Errorf("cannot delete built-in plan")
+	}
+
+	_, err = s.db.Exec("DELETE FROM plans WHERE id = ?", id)
+	return err
 }
 
 func (s *PlanStore) ListVersions(planID string) ([]PlanVersion, error) {

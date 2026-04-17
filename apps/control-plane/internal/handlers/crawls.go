@@ -244,7 +244,7 @@ func (h *CrawlHandlers) GeneratePlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save the plan
-	savedPlan, err := h.plans.Create(plan.Name, plan.Description, plan.Tags, plan.Root, nil)
+	savedPlan, err := h.plans.Create(plan.Name, plan.Description, plan.Tags, plan.Root, nil, false)
 	if err != nil {
 		internalError(w, err)
 		return
