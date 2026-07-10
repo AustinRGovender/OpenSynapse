@@ -3,8 +3,11 @@ module github.com/opensynapse/opensynapse/apps/control-plane
 go 1.25.0
 
 require (
+	github.com/go-rod/rod v0.116.2
+	github.com/gocolly/colly/v2 v2.3.0
 	github.com/google/uuid v1.6.0
-	golang.org/x/crypto v0.50.0
+	github.com/ysmood/gson v0.7.3
+	golang.org/x/crypto v0.52.0
 	modernc.org/sqlite v1.48.2
 	nhooyr.io/websocket v1.8.17
 )
@@ -17,9 +20,7 @@ require (
 	github.com/antchfx/xpath v1.3.5 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/go-rod/rod v0.116.2 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gocolly/colly/v2 v2.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/kennygrant/sanitize v1.2.4 // indirect
@@ -32,11 +33,10 @@ require (
 	github.com/ysmood/fetchup v0.2.3 // indirect
 	github.com/ysmood/goob v0.4.0 // indirect
 	github.com/ysmood/got v0.40.0 // indirect
-	github.com/ysmood/gson v0.7.3 // indirect
 	github.com/ysmood/leakless v0.9.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	modernc.org/libc v1.70.0 // indirect
