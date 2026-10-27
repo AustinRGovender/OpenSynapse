@@ -1,18 +1,20 @@
-// Package engine runs k6 as a subprocess and owns everything that happens
-// while a test is live: streaming metrics, driving the VU schedule, and
-// applying live-control changes.
+// Package engine runs k6 and owns everything that happens while a test is
+// live: streaming metrics, driving the VU schedule, and applying live-control
+// changes.
 //
-// Metrics come from k6's `--out json` stream, which the engine tails and
-// aggregates into one point per second (see aggregator.go and
+// k6 runs either as a local subprocess or, in cluster mode, as the runner
+// pods of a k6-operator TestRun (see kubernetes.go). Either way each k6
+// instance writes its `--out json` stream, which the engine aggregates into
+// one point per second (see aggregator.go and
 // docs/decisions/0010-run-metrics-and-live-control.md). VU-based scenarios
 // run under k6's externally-controlled executor and the engine moves VUs
-// through k6's REST API to follow the plan's stages, so users can override the
-// profile mid-run. RPS limits and the stop flag reach VUs through an xk6-kv
-// store that an internal control scenario keeps in sync with the control plane.
+// through each instance's REST API to follow the plan's stages, so users can
+// override the profile mid-run. RPS limits and the stop flag reach VUs through
+// an xk6-kv store that an internal control scenario keeps in sync with the
+// control plane.
 package engine
 
 import (
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -21,13 +23,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -42,10 +41,10 @@ var ErrUnsupported = errors.New("unsupported")
 var ErrNotActive = errors.New("run not active")
 
 // flushLag is how many seconds behind wall-clock time snapshots are emitted,
-// giving k6's JSON output time to flush a second's samples to disk.
+// giving k6's JSON output time to flush a second's samples.
 const flushLag = 1
 
-// stopGrace is how long a graceful stop may take before the process is killed.
+// stopGrace is how long a graceful stop may take before k6 is killed.
 const stopGrace = 30 * time.Second
 
 // Capabilities describes the k6 binary the engine found.
@@ -55,12 +54,22 @@ type Capabilities struct {
 	KV bool `json:"kv"`
 }
 
+// Execution describes where runs execute.
+type Execution struct {
+	// Mode is "local" (a k6 subprocess) or "kubernetes" (k6-operator TestRuns).
+	Mode string `json:"mode"`
+	// MaxWorkers is the most k6 instances one run may use.
+	MaxWorkers int `json:"max_workers"`
+}
+
 // RunSpec describes one run to execute.
 type RunSpec struct {
 	RunID  string
 	Script string
 	// Env is exposed to the script as __ENV (environment variables, secrets).
 	Env map[string]string
+	// Instances is how many k6 instances share the load (cluster mode only).
+	Instances int
 	// Schedule is set when the engine drives VUs for an externally-controlled
 	// scenario. Nil means the script's native executors decide everything.
 	Schedule *Schedule
@@ -75,8 +84,8 @@ type RunSpec struct {
 	// internal control scenario (requires xk6-kv).
 	ControlURL   string
 	ControlToken string
-	// RawSamplesPath, if set, receives a gzip archive of the raw k6 samples.
-	RawSamplesPath string
+	// RawSamples, if set, opens where a gzip archive of the raw k6 samples goes.
+	RawSamples func() (io.WriteCloser, error)
 }
 
 // LiveState is the control-panel view of a running test.
@@ -94,6 +103,10 @@ type LiveState struct {
 	CanControlVUs    bool `json:"can_control_vus"`
 	CanControlRPS    bool `json:"can_control_rps"`
 	CanControlDur    bool `json:"can_control_duration"`
+	// Workers is how many k6 instances share the run; Starting is true until
+	// they all begin executing (cluster runs take a while to schedule).
+	Workers  int  `json:"workers"`
+	Starting bool `json:"starting"`
 }
 
 // Callbacks receive a run's output. They are invoked from engine goroutines.
@@ -103,7 +116,7 @@ type Callbacks struct {
 	OnMetrics func(points []db.MetricPoint, state LiveState)
 	// OnErrors is called with failed requests recorded since the last call.
 	OnErrors func(errs []db.RunError)
-	// OnComplete is called exactly once when the k6 process has exited.
+	// OnComplete is called exactly once when every k6 instance has exited.
 	OnComplete func(res Result)
 }
 
@@ -115,10 +128,27 @@ type Result struct {
 	Message  string
 }
 
-// Engine manages k6 subprocesses.
+// backend runs the k6 instances of one run and feeds their output to the
+// runProcess (ingest, addLog, markStarted).
+type backend interface {
+	// apis returns the base URLs of the instances' REST APIs.
+	apis() []string
+	// wait blocks until every instance has exited and its output is drained,
+	// and returns the combined exit code.
+	wait() int
+	// interrupt asks the instances to stop when their REST APIs are unreachable.
+	interrupt() error
+	// kill stops every instance immediately.
+	kill() error
+	// cleanup releases what the run created, after it has finished.
+	cleanup()
+}
+
+// Engine starts and tracks runs.
 type Engine struct {
 	k6Path string
 	caps   Capabilities
+	kube   *KubernetesConfig
 
 	mu     sync.Mutex
 	active map[string]*runProcess
@@ -137,6 +167,24 @@ func New() (*Engine, error) {
 	e := &Engine{k6Path: k6Path, active: make(map[string]*runProcess)}
 	e.caps = probeCapabilities(k6Path)
 	return e, nil
+}
+
+// UseKubernetes switches the engine to cluster mode: runs become k6-operator
+// TestRuns. The runner image must contain the same k6 build this process
+// probed (the control-plane image does).
+func (e *Engine) UseKubernetes(cfg KubernetesConfig) {
+	if cfg.MaxWorkers <= 0 {
+		cfg.MaxWorkers = 1
+	}
+	e.kube = &cfg
+}
+
+// Execution reports where runs execute and how many workers a run may use.
+func (e *Engine) Execution() Execution {
+	if e.kube != nil {
+		return Execution{Mode: "kubernetes", MaxWorkers: e.kube.MaxWorkers}
+	}
+	return Execution{Mode: "local", MaxWorkers: 1}
 }
 
 // versionRe matches "k6 v1.8.2 (...)" and, on Windows, "k6.exe v1.7.1 (...)".
@@ -176,19 +224,20 @@ func (e *Engine) noSummaryFlag() string {
 	return "--summary-mode=disabled"
 }
 
-// baseEnv is the minimal environment k6 runs with. The control plane's own
-// environment (database DSNs, object-store keys) is deliberately not passed
-// through, because k6 exposes every environment variable to scripts as __ENV.
+// k6Settings are the environment variables every k6 instance runs with.
+// Never contact Grafana services: no usage report, no automatic download of
+// k6 builds for unknown extensions.
+var k6Settings = []string{"K6_NO_USAGE_REPORT=true", "K6_AUTO_EXTENSION_RESOLUTION=false"}
+
+// baseEnv is the minimal environment a local k6 runs with. The control
+// plane's own environment (database DSNs, object-store keys) is deliberately
+// not passed through, because k6 exposes every environment variable to
+// scripts as __ENV.
 func baseEnv() []string {
 	keep := []string{"PATH", "HOME", "USERPROFILE", "TMP", "TEMP", "TMPDIR", "SYSTEMROOT", "SystemRoot",
 		"WINDIR", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
 		"ROD_BROWSER_BIN"}
-	env := []string{
-		// Never contact Grafana services: no usage report, no automatic
-		// download of k6 builds for unknown extensions.
-		"K6_NO_USAGE_REPORT=true",
-		"K6_AUTO_EXTENSION_RESOLUTION=false",
-	}
+	env := append([]string(nil), k6Settings...)
 	for _, k := range keep {
 		if v, ok := os.LookupEnv(k); ok {
 			env = append(env, k+"="+v)
@@ -197,28 +246,38 @@ func baseEnv() []string {
 	return env
 }
 
-func findFreePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
+// runEnv is what the script sees as __ENV, besides the k6 settings: the
+// environment's variables and the live-control wiring.
+func runEnv(spec RunSpec) map[string]string {
+	env := map[string]string{}
+	for k, v := range spec.Env {
+		env[k] = v
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+	env["OPENSYNAPSE_RPS_TARGET"] = fmt.Sprint(spec.RPSTarget)
+	env["OPENSYNAPSE_INSTANCES"] = fmt.Sprint(max(1, spec.Instances))
+	if spec.ControlURL != "" {
+		env["OPENSYNAPSE_CONTROL_URL"] = spec.ControlURL
+		env["OPENSYNAPSE_CONTROL_TOKEN"] = spec.ControlToken
+	}
+	return env
 }
 
 type runProcess struct {
 	spec    RunSpec
 	cb      Callbacks
-	cmd     *exec.Cmd
-	dir     string
-	apiPort int
+	backend backend
 	agg     *aggregator
 	client  *http.Client
 
-	exited   chan struct{} // closed when the k6 process has exited
+	rawMu  sync.Mutex
+	rawOut io.WriteCloser
+	raw    *gzip.Writer
+
+	exited   chan struct{} // closed when every instance has exited
 	finished chan struct{} // closed after OnComplete has run
 
 	mu            sync.Mutex
+	started       bool
 	start         time.Time
 	paused        bool
 	pausedAt      time.Time
@@ -231,67 +290,29 @@ type runProcess struct {
 	plannedEnd    time.Duration // planned duration (moves with live duration changes)
 	stopRequested bool
 	killed        bool
-	stderrTail    []string
+	logTail       []string
 }
 
-// StartRun launches k6 for the spec and returns once the process has started.
+// StartRun launches k6 for the spec and returns once it has been started
+// (locally) or submitted to the cluster.
 func (e *Engine) StartRun(spec RunSpec, cb Callbacks) error {
-	dir, err := os.MkdirTemp("", "opensynapse-run-")
-	if err != nil {
-		return fmt.Errorf("create run dir: %w", err)
+	if spec.Instances <= 0 {
+		spec.Instances = 1
 	}
-	scriptPath := filepath.Join(dir, "script.js")
-	if err := os.WriteFile(scriptPath, []byte(spec.Script), 0o600); err != nil {
-		os.RemoveAll(dir)
-		return fmt.Errorf("write script: %w", err)
+	if e.kube == nil && spec.Instances > 1 {
+		return fmt.Errorf("running on %d workers needs cluster mode (OPENSYNAPSE_MODE=cluster)", spec.Instances)
 	}
-	metricsPath := filepath.Join(dir, "metrics.json")
-
-	apiPort, err := findFreePort()
-	if err != nil {
-		os.RemoveAll(dir)
-		return fmt.Errorf("allocate k6 API port: %w", err)
+	if e.kube != nil && spec.Instances > e.kube.MaxWorkers {
+		return fmt.Errorf("at most %d workers per run are allowed", e.kube.MaxWorkers)
 	}
-
-	args := []string{
-		"run",
-		"--no-color",
-		"--quiet",
-		e.noSummaryFlag(),
-		"--no-usage-report",
-		fmt.Sprintf("--address=127.0.0.1:%d", apiPort),
-		"--out", "json=" + metricsPath,
-		scriptPath,
-	}
-	cmd := exec.Command(e.k6Path, args...)
-	cmd.Dir = dir
-	cmd.Env = baseEnv()
-	for k, v := range spec.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-	cmd.Env = append(cmd.Env, fmt.Sprintf("OPENSYNAPSE_RPS_TARGET=%d", spec.RPSTarget))
-	if spec.ControlURL != "" {
-		cmd.Env = append(cmd.Env,
-			"OPENSYNAPSE_CONTROL_URL="+spec.ControlURL,
-			"OPENSYNAPSE_CONTROL_TOKEN="+spec.ControlToken)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		os.RemoveAll(dir)
-		return fmt.Errorf("stderr pipe: %w", err)
-	}
-	cmd.Stdout = io.Discard
 
 	vuOffset := 0
 	if spec.ControlURL != "" {
-		vuOffset = 1
+		vuOffset = 1 // the internal control VU, once per instance
 	}
 	rp := &runProcess{
 		spec:       spec,
 		cb:         cb,
-		cmd:        cmd,
-		dir:        dir,
-		apiPort:    apiPort,
 		agg:        newAggregator(vuOffset),
 		client:     &http.Client{Timeout: 3 * time.Second},
 		exited:     make(chan struct{}),
@@ -304,124 +325,99 @@ func (e *Engine) StartRun(spec RunSpec, cb Callbacks) error {
 		rp.targetVUs = spec.Schedule.TargetAt(0)
 		rp.sentVUs = rp.targetVUs
 	}
-
-	if err := cmd.Start(); err != nil {
-		os.RemoveAll(dir)
-		return fmt.Errorf("start k6: %w", err)
+	if spec.RawSamples != nil {
+		if out, err := spec.RawSamples(); err != nil {
+			log.Printf("run %s: raw samples archive unavailable: %v", spec.RunID, err)
+		} else {
+			rp.rawOut, rp.raw = out, gzip.NewWriter(out)
+		}
 	}
-	rp.start = time.Now()
+
+	var err error
+	if e.kube != nil {
+		rp.backend, err = startKubernetes(*e.kube, rp)
+	} else {
+		rp.backend, err = e.startLocal(rp)
+	}
+	if err != nil {
+		rp.closeRaw()
+		return err
+	}
 
 	e.mu.Lock()
 	e.active[spec.RunID] = rp
 	e.mu.Unlock()
 
-	go rp.readStderr(stderr)
-	tailDone := make(chan struct{})
-	go func() {
-		defer close(tailDone)
-		rp.tail(metricsPath)
-	}()
 	go rp.loop()
 	go func() {
-		exitCode := 0
-		if err := cmd.Wait(); err != nil {
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				exitCode = exitErr.ExitCode()
-			} else {
-				exitCode = -1
-			}
-		}
+		exitCode := rp.backend.wait()
 		close(rp.exited)
-		<-tailDone
 		rp.complete(exitCode)
+		rp.closeRaw()
 
 		e.mu.Lock()
 		delete(e.active, spec.RunID)
 		e.mu.Unlock()
-		os.RemoveAll(dir)
+		rp.backend.cleanup()
 		close(rp.finished)
 	}()
 	return nil
 }
 
-func (rp *runProcess) readStderr(r io.Reader) {
-	s := bufio.NewScanner(r)
-	s.Buffer(make([]byte, 64*1024), 1024*1024)
-	for s.Scan() {
-		rp.mu.Lock()
-		rp.stderrTail = append(rp.stderrTail, s.Text())
-		if len(rp.stderrTail) > 40 {
-			rp.stderrTail = rp.stderrTail[len(rp.stderrTail)-40:]
-		}
-		rp.mu.Unlock()
+// markStarted records that every instance is executing; the schedule and the
+// planned end are measured from here.
+func (rp *runProcess) markStarted() {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	if !rp.started {
+		rp.started, rp.start = true, time.Now()
 	}
 }
 
-// tail follows k6's JSON output file until the process has exited and the
-// file is fully drained.
-func (rp *runProcess) tail(path string) {
-	var f *os.File
-	for {
-		var err error
-		if f, err = os.Open(path); err == nil {
-			break
-		}
-		select {
-		case <-rp.exited:
-			if f, err = os.Open(path); err != nil {
-				return // k6 exited before producing output
-			}
-		case <-time.After(100 * time.Millisecond):
-			continue
-		}
-		break
-	}
-	defer f.Close()
+func (rp *runProcess) isStarted() bool {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	return rp.started
+}
 
-	var raw *gzip.Writer
-	if rp.spec.RawSamplesPath != "" {
-		if err := os.MkdirAll(filepath.Dir(rp.spec.RawSamplesPath), 0o755); err == nil {
-			if out, err := os.Create(rp.spec.RawSamplesPath); err == nil {
-				defer out.Close()
-				raw = gzip.NewWriter(out)
-				defer raw.Close()
-			}
-		}
+// ingest takes one line of an instance's `--out json` stream.
+func (rp *runProcess) ingest(instance string, line []byte) {
+	if !rp.agg.ingest(instance, line) {
+		return
 	}
-
-	r := bufio.NewReaderSize(f, 256*1024)
-	var partial []byte
-	exited := false
-	for {
-		chunk, err := r.ReadBytes('\n')
-		partial = append(partial, chunk...)
-		if err == nil {
-			if rp.agg.ingest(partial) && raw != nil {
-				raw.Write(partial)
-			}
-			partial = partial[:0]
-			continue
-		}
-		if err != io.EOF {
-			log.Printf("run %s: reading k6 output: %v", rp.spec.RunID, err)
-			return
-		}
-		if exited {
-			if len(bytes.TrimSpace(partial)) > 0 && rp.agg.ingest(partial) && raw != nil {
-				raw.Write(append(partial, '\n'))
-			}
-			return
-		}
-		select {
-		case <-rp.exited:
-			exited = true // one more pass to drain what k6 flushed on exit
-		case <-time.After(100 * time.Millisecond):
+	rp.rawMu.Lock()
+	defer rp.rawMu.Unlock()
+	if rp.raw != nil {
+		rp.raw.Write(line)
+		if len(line) == 0 || line[len(line)-1] != '\n' {
+			rp.raw.Write([]byte{'\n'})
 		}
 	}
 }
 
-// loop runs once a second for the life of the process: it advances the VU
+func (rp *runProcess) closeRaw() {
+	rp.rawMu.Lock()
+	defer rp.rawMu.Unlock()
+	if rp.raw != nil {
+		rp.raw.Close()
+		if err := rp.rawOut.Close(); err != nil {
+			log.Printf("run %s: store raw samples: %v", rp.spec.RunID, err)
+		}
+		rp.raw, rp.rawOut = nil, nil
+	}
+}
+
+// addLog keeps the last lines of k6's log output for failure messages.
+func (rp *runProcess) addLog(line string) {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	rp.logTail = append(rp.logTail, line)
+	if len(rp.logTail) > 40 {
+		rp.logTail = rp.logTail[len(rp.logTail)-40:]
+	}
+}
+
+// loop runs once a second for the life of the run: it advances the VU
 // schedule, enforces the end time, and publishes metrics.
 func (rp *runProcess) loop() {
 	ticker := time.NewTicker(time.Second)
@@ -446,6 +442,9 @@ func (rp *runProcess) loop() {
 }
 
 func (rp *runProcess) elapsed(now time.Time) time.Duration {
+	if !rp.started {
+		return 0
+	}
 	paused := rp.pausedTotal
 	if rp.paused {
 		paused += now.Sub(rp.pausedAt)
@@ -455,7 +454,7 @@ func (rp *runProcess) elapsed(now time.Time) time.Duration {
 
 func (rp *runProcess) driveSchedule(now time.Time) {
 	rp.mu.Lock()
-	if rp.spec.Schedule == nil || rp.manualVUs || rp.paused || rp.stopRequested {
+	if !rp.started || rp.spec.Schedule == nil || rp.manualVUs || rp.paused || rp.stopRequested {
 		rp.mu.Unlock()
 		return
 	}
@@ -472,14 +471,16 @@ func (rp *runProcess) driveSchedule(now time.Time) {
 
 func (rp *runProcess) enforceDeadline(now time.Time) {
 	rp.mu.Lock()
-	due := rp.plannedEnd > 0 && !rp.stopRequested && rp.elapsed(now) >= rp.plannedEnd
+	due := rp.started && rp.plannedEnd > 0 && !rp.stopRequested && rp.elapsed(now) >= rp.plannedEnd
 	rp.mu.Unlock()
 	if due {
 		rp.requestStop()
 	}
 }
 
-// applyVUs sets the active VU count through k6's REST API, raising vus-max first if needed.
+// applyVUs sets the active VU count through k6's REST API, raising vus-max
+// first if needed. With several instances every one receives the run-wide
+// numbers; each scales them by its execution segment.
 func (rp *runProcess) applyVUs(n int) error {
 	rp.mu.Lock()
 	vusMax := rp.vusMax
@@ -501,11 +502,35 @@ func (rp *runProcess) applyVUs(n int) error {
 	return nil
 }
 
+// patchStatus sends a status change to every instance's REST API at once.
 func (rp *runProcess) patchStatus(attrs map[string]any) error {
+	apis := rp.backend.apis()
+	if len(apis) == 0 {
+		return errors.New("k6 has not started yet")
+	}
 	body, _ := json.Marshal(map[string]any{
 		"data": map[string]any{"type": "status", "id": "default", "attributes": attrs},
 	})
-	req, _ := http.NewRequest(http.MethodPatch, fmt.Sprintf("http://127.0.0.1:%d/v1/status", rp.apiPort), bytes.NewReader(body))
+	errs := make([]error, len(apis))
+	var wg sync.WaitGroup
+	for i, base := range apis {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = rp.patchOne(base, body)
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (rp *runProcess) patchOne(base string, body []byte) error {
+	req, _ := http.NewRequest(http.MethodPatch, base+"/v1/status", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := rp.client.Do(req)
 	if err != nil {
@@ -544,8 +569,8 @@ func (rp *runProcess) requestStop() {
 
 	if err := rp.patchStatus(map[string]any{"stopped": true}); err != nil {
 		log.Printf("run %s: graceful stop via REST failed (%v); interrupting", rp.spec.RunID, err)
-		if runtime.GOOS == "windows" || rp.cmd.Process.Signal(os.Interrupt) != nil {
-			rp.cmd.Process.Kill()
+		if err := rp.backend.interrupt(); err != nil {
+			rp.backend.kill()
 		}
 	}
 	go func() {
@@ -553,7 +578,7 @@ func (rp *runProcess) requestStop() {
 		case <-rp.exited:
 		case <-time.After(stopGrace):
 			log.Printf("run %s: graceful stop timed out; killing k6", rp.spec.RunID)
-			rp.cmd.Process.Kill()
+			rp.backend.kill()
 		}
 	}()
 }
@@ -576,6 +601,8 @@ func (rp *runProcess) state(now time.Time) LiveState {
 		CanControlVUs:    rp.spec.Schedule != nil,
 		CanControlRPS:    rp.spec.ControlURL != "",
 		CanControlDur:    rp.spec.PlannedDuration > 0,
+		Workers:          rp.spec.Instances,
+		Starting:         !rp.started,
 	}
 	if rp.plannedEnd > 0 {
 		rem := rp.plannedEnd - el
@@ -604,7 +631,7 @@ func (rp *runProcess) complete(exitCode int) {
 	summary := rp.agg.summary()
 	rp.mu.Lock()
 	killed, stopRequested := rp.killed, rp.stopRequested
-	tail := append([]string(nil), rp.stderrTail...)
+	tail := append([]string(nil), rp.logTail...)
 	rp.mu.Unlock()
 
 	res := Result{ExitCode: exitCode, Summary: summary}
@@ -631,12 +658,36 @@ func (rp *runProcess) complete(exitCode int) {
 	}
 }
 
+// combineExitCodes folds several instances' exit codes into one: a real
+// failure wins over failed thresholds, which win over a requested stop.
+func combineExitCodes(codes []int) int {
+	worst := 0
+	rank := func(c int) int {
+		switch c {
+		case 0:
+			return 0
+		case 103:
+			return 1
+		case 99:
+			return 2
+		default:
+			return 3
+		}
+	}
+	for _, c := range codes {
+		if rank(c) > rank(worst) {
+			worst = c
+		}
+	}
+	return worst
+}
+
 var k6ErrorRe = regexp.MustCompile(`level=error msg="((?:[^"\\]|\\.)*)"`)
 
 // failureMessage turns k6's exit code and last log lines into a readable reason.
-func failureMessage(exitCode int, stderr []string) string {
+func failureMessage(exitCode int, logs []string) string {
 	var msgs []string
-	for _, l := range stderr {
+	for _, l := range logs {
 		if m := k6ErrorRe.FindStringSubmatch(l); m != nil {
 			msgs = append(msgs, strings.ReplaceAll(m[1], `\"`, `"`))
 		}
@@ -660,10 +711,10 @@ func failureMessage(exitCode int, stderr []string) string {
 			msgs = msgs[len(msgs)-3:]
 		}
 		out += ": " + strings.Join(msgs, " | ")
-	} else if n := len(stderr); n > 0 {
-		last := stderr
+	} else if n := len(logs); n > 0 {
+		last := logs
 		if n > 3 {
-			last = stderr[n-3:]
+			last = logs[n-3:]
 		}
 		out += ": " + strings.Join(last, " | ")
 	}
@@ -682,7 +733,7 @@ func (e *Engine) get(runID string) (*runProcess, error) {
 	return rp, nil
 }
 
-// IsRunning reports whether a run's k6 process is still executing.
+// IsRunning reports whether a run is still executing.
 func (e *Engine) IsRunning(runID string) bool {
 	_, err := e.get(runID)
 	return err == nil
@@ -802,6 +853,7 @@ func (e *Engine) SetDuration(runID string, seconds int) error {
 }
 
 // ControlState is what the in-script control scenario reads each second.
+// RPSTarget is run-wide; each instance takes its share (OPENSYNAPSE_INSTANCES).
 type ControlState struct {
 	RPSTarget  int  `json:"rps_target"`
 	ShouldStop bool `json:"should_stop"`
@@ -841,7 +893,7 @@ func (e *Engine) KillRun(runID string) error {
 	rp.mu.Lock()
 	rp.killed = true
 	rp.mu.Unlock()
-	return rp.cmd.Process.Kill()
+	return rp.backend.kill()
 }
 
 // ActiveCount is the number of runs executing now.
@@ -851,8 +903,8 @@ func (e *Engine) ActiveCount() int {
 	return len(e.active)
 }
 
-// Shutdown kills every running k6 process (on control-plane exit) and waits
-// briefly for their completion callbacks so their status is recorded.
+// Shutdown kills every running k6 (on control-plane exit) and waits briefly
+// for their completion callbacks so their status is recorded.
 func (e *Engine) Shutdown(wait time.Duration) {
 	e.mu.Lock()
 	procs := make([]*runProcess, 0, len(e.active))
@@ -864,7 +916,7 @@ func (e *Engine) Shutdown(wait time.Duration) {
 		rp.mu.Lock()
 		rp.killed = true
 		rp.mu.Unlock()
-		rp.cmd.Process.Kill()
+		rp.backend.kill()
 	}
 	deadline := time.After(wait)
 	for _, rp := range procs {

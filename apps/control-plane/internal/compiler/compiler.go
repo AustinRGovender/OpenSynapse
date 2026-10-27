@@ -40,6 +40,10 @@ type Options struct {
 	KV bool
 	// Overrides are the Run dialog's per-run parameters.
 	Overrides *db.RunParameters
+	// Instances is how many k6 instances share the run (cluster mode). The
+	// control scenario gets one VU per instance so every instance, whatever
+	// its execution segment, receives live-control state.
+	Instances int
 }
 
 // ProfileStage is one step of a managed VU profile.
@@ -290,7 +294,7 @@ func (c *compiler) compilePlan(root db.Node) error {
 			fn:  "__osControl",
 			options: []string{
 				"executor: 'constant-vus'",
-				"vus: 1",
+				fmt.Sprintf("vus: %d", max(1, c.opts.Instances)),
 				fmt.Sprintf("duration: '%ds'", int(dur.Seconds())),
 				"gracefulStop: '0s'",
 				"exec: '__osControl'",
@@ -1377,7 +1381,9 @@ function __v(name) {
 // the target. See docs/decisions/0010-run-metrics-and-live-control.md.
 const controlHelper = `// --- OpenSynapse live control (xk6-kv) ---
 const __osKv = openKv({ backend: 'memory' });
-let __osRps = Number(__ENV.OPENSYNAPSE_RPS_TARGET || 0);
+// With several k6 instances (cluster mode) each paces its share of the limit.
+const __osInstances = Math.max(1, Number(__ENV.OPENSYNAPSE_INSTANCES || 1));
+let __osRps = Number(__ENV.OPENSYNAPSE_RPS_TARGET || 0) / __osInstances;
 let __osNext = 0;
 
 export async function __osControl() {
@@ -1397,7 +1403,7 @@ export async function __osControl() {
 // Reads live-control state at the start of each iteration. Returns false
 // while the run is paused or being stopped, so no new requests start.
 async function __osSync() {
-  try { __osRps = Number(await __osKv.get('rps_target')) || 0; } catch (e) { /* not published yet */ }
+  try { __osRps = (Number(await __osKv.get('rps_target')) || 0) / __osInstances; } catch (e) { /* not published yet */ }
   let hold = false;
   try { hold = !!(await __osKv.get('should_stop')) || !!(await __osKv.get('paused')); } catch (e) { /* not published yet */ }
   if (hold) {

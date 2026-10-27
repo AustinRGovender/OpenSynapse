@@ -3,8 +3,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -42,6 +44,13 @@ type Config struct {
 	// ControlURL is the base URL k6 uses to reach the control plane's
 	// control-state endpoint. Defaults to the loopback listener.
 	ControlURL string
+
+	// Cluster mode: the image runner pods use (k6 with xk6-kv), its pull
+	// policy, optional pod resources as JSON, and the most workers per run.
+	RunnerImage      string
+	RunnerPullPolicy string
+	RunnerResources  string
+	MaxWorkers       int
 }
 
 // Load reads configuration from environment variables.
@@ -88,6 +97,17 @@ func Load() (*Config, error) {
 		c.ControlURL = "http://127.0.0.1:" + c.Port
 	}
 	c.ControlURL = strings.TrimRight(c.ControlURL, "/")
+
+	c.RunnerImage = os.Getenv("OPENSYNAPSE_RUNNER_IMAGE")
+	c.RunnerPullPolicy = envOr("OPENSYNAPSE_RUNNER_PULL_POLICY", "IfNotPresent")
+	c.RunnerResources = os.Getenv("OPENSYNAPSE_RUNNER_RESOURCES")
+	c.MaxWorkers = 16
+	if n, err := strconv.Atoi(os.Getenv("OPENSYNAPSE_MAX_WORKERS")); err == nil && n > 0 {
+		c.MaxWorkers = n
+	}
+	if c.Mode == ModeCluster && c.RunnerImage == "" {
+		return nil, fmt.Errorf("OPENSYNAPSE_RUNNER_IMAGE is required in cluster mode (an image with k6 and xk6-kv, such as the control-plane image)")
+	}
 
 	return c, nil
 }

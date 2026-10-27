@@ -2,15 +2,14 @@ package handlers
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/artifacts"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/observability"
 )
@@ -97,26 +96,6 @@ func (h *SettingsHandlers) Update(w http.ResponseWriter, r *http.Request) {
 	h.Get(w, r)
 }
 
-func dirSize(path string) int64 {
-	var total int64
-	filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
-		if err == nil && !d.IsDir() {
-			if info, err := d.Info(); err == nil {
-				total += info.Size()
-			}
-		}
-		return nil
-	})
-	return total
-}
-
-func fileSize(path string) int64 {
-	if info, err := os.Stat(path); err == nil {
-		return info.Size()
-	}
-	return 0
-}
-
 // Storage reports where data lives, how big it is, and what the retention
 // policy would remove right now.
 func (h *SettingsHandlers) Storage(w http.ResponseWriter, r *http.Request) {
@@ -124,14 +103,13 @@ func (h *SettingsHandlers) Storage(w http.ResponseWriter, r *http.Request) {
 	prune, _ := h.runs.RunsToPrune(st.Storage.RetentionMode, st.Storage.RetentionCount, st.Storage.RetentionDays)
 	var pruneBytes int64
 	for _, id := range prune {
-		pruneBytes += dirSize(filepath.Join(h.system.DataDir, "runs", id))
+		pruneBytes += h.system.artifactBytes(r.Context(), artifacts.RunPrefix(id))
 	}
-	dbBytes := fileSize(h.system.DBPath) + fileSize(h.system.DBPath+"-wal")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data_dir":           h.system.DataDir,
-		"database":           h.system.DBPath,
-		"database_bytes":     dbBytes,
-		"samples_bytes":      dirSize(filepath.Join(h.system.DataDir, "runs")),
+		"database":           h.system.Database,
+		"database_bytes":     h.system.databaseBytes(),
+		"samples_bytes":      h.system.artifactBytes(r.Context(), "runs/"),
 		"runs":               h.runs.Count(),
 		"retention":          st.Storage,
 		"prunable_runs":      len(prune),
@@ -160,8 +138,8 @@ func (h *SettingsHandlers) ApplyRetention() (int, error) {
 		return 0, err
 	}
 	for _, id := range ids {
-		if h.runs.Delete(id) == nil && h.system.DataDir != "" {
-			os.RemoveAll(filepath.Join(h.system.DataDir, "runs", id))
+		if h.runs.Delete(id) == nil && h.system.Artifacts != nil {
+			h.system.Artifacts.DeletePrefix(context.Background(), artifacts.RunPrefix(id))
 		}
 	}
 	return len(ids), nil
@@ -199,7 +177,7 @@ func (h *SettingsHandlers) Diagnostics(w http.ResponseWriter, r *http.Request) {
 		}
 		add("settings.json", st)
 	}
-	add("storage.json", map[string]any{"runs": h.runs.Count(), "database_bytes": fileSize(h.system.DBPath)})
+	add("storage.json", map[string]any{"runs": h.runs.Count(), "database_bytes": h.system.databaseBytes()})
 	if f, err := zw.Create("logs.txt"); err == nil {
 		for _, l := range observability.Logs.Lines() {
 			fmt.Fprintln(f, redactLogLine(l))

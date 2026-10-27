@@ -91,7 +91,10 @@ func Middleware(cfg SecurityConfig) func(http.Handler) http.Handler {
 			h.Set("Referrer-Policy", "no-referrer")
 			h.Set("X-Frame-Options", "DENY")
 
-			if !cfg.hostAllowed(r.Host) {
+			// Health checks come from orchestrators by IP address (kubelet
+			// probes, load balancers); their static answers reveal nothing.
+			probe := r.Method == http.MethodGet && (r.URL.Path == "/health" || r.URL.Path == "/ready")
+			if !probe && !cfg.hostAllowed(r.Host) {
 				deny(w, "HOST_NOT_ALLOWED", "Requests to host "+hostOnly(r.Host)+" are not allowed. Add it to OPENSYNAPSE_ALLOWED_HOSTS.")
 				return
 			}

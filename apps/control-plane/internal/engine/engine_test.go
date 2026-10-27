@@ -34,7 +34,7 @@ func TestAggregatorSummarisesRealK6Output(t *testing.T) {
 	a := newAggregator(0)
 	var reqs int
 	for _, l := range lines {
-		a.ingest(l)
+		a.ingest("", l)
 		if strings.Contains(string(l), `"metric":"http_reqs"`) {
 			reqs++
 		}
@@ -82,7 +82,7 @@ func TestAggregatorCountsFailuresAndSkipsControlScenario(t *testing.T) {
 	a := newAggregator(1)
 	ts := `"time":"2026-10-27T10:00:00.5Z"`
 	ingest := func(metric, value, tags string) {
-		a.ingest([]byte(`{"type":"Point","metric":"` + metric + `","data":{` + ts + `,"value":` + value + `,"tags":{` + tags + `}}}`))
+		a.ingest("", []byte(`{"type":"Point","metric":"`+metric+`","data":{`+ts+`,"value":`+value+`,"tags":{`+tags+`}}}`))
 	}
 	user := `"scenario":"main","method":"GET","name":"http://x/err","url":"http://x/err","status":"500"`
 	control := `"scenario":"` + ControlScenario + `","method":"GET","name":"opensynapse-control","status":"200"`
@@ -117,8 +117,8 @@ func TestAggregatorCountsFailuresAndSkipsControlScenario(t *testing.T) {
 
 func TestSnapshotsFillQuietSeconds(t *testing.T) {
 	a := newAggregator(0)
-	a.ingest([]byte(`{"type":"Point","metric":"http_reqs","data":{"time":"2026-10-27T10:00:00Z","value":1,"tags":{}}}`))
-	a.ingest([]byte(`{"type":"Point","metric":"http_reqs","data":{"time":"2026-10-27T10:00:03Z","value":1,"tags":{}}}`))
+	a.ingest("", []byte(`{"type":"Point","metric":"http_reqs","data":{"time":"2026-10-27T10:00:00Z","value":1,"tags":{}}}`))
+	a.ingest("", []byte(`{"type":"Point","metric":"http_reqs","data":{"time":"2026-10-27T10:00:03Z","value":1,"tags":{}}}`))
 	base := time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC).Unix()
 	pts := a.snapshots(base + 3)
 	if len(pts) != 4 {

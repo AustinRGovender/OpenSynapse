@@ -3,18 +3,18 @@ package handlers
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/artifacts"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/browser"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/report"
 )
@@ -107,9 +107,8 @@ func (h *ExportHandlers) exportCSV(w http.ResponseWriter, doc *RunReport, name s
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
 
-	if h.runs.DataDir != "" {
-		path := filepath.Join(h.runs.DataDir, "runs", doc.Run.ID, "samples.jsonl.gz")
-		if f, err := os.Open(path); err == nil {
+	if h.runs.Artifacts != nil {
+		if f, err := h.runs.Artifacts.Open(context.Background(), artifacts.RunSamplesKey(doc.Run.ID)); err == nil {
 			defer f.Close()
 			if gz, err := gzip.NewReader(f); err == nil {
 				defer gz.Close()

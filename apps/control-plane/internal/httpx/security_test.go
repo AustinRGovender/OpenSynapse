@@ -49,3 +49,18 @@ func TestSecurityMiddleware(t *testing.T) {
 		t.Errorf("wildcard host should be allowed, got %d", rec.Code)
 	}
 }
+
+// Orchestrator health probes arrive by pod IP; only GET /health and /ready
+// skip the Host check.
+func TestHealthProbesSkipHostCheck(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	h := Middleware(SecurityConfig{})(ok)
+	for path, want := range map[string]int{"/health": 200, "/ready": 200, "/api/v1/runs": 403, "/healthz": 403} {
+		req := httptest.NewRequest("GET", "http://10.244.0.9:8090"+path, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("GET %s from a pod IP: got %d, want %d", path, rec.Code, want)
+		}
+	}
+}

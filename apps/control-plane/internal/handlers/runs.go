@@ -1,18 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/artifacts"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/auth"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/compiler"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
@@ -39,8 +40,8 @@ type RunHandlers struct {
 	// ControlBaseURL is how k6 (running next to the control plane) reaches
 	// the control-state endpoint, e.g. http://127.0.0.1:8090.
 	ControlBaseURL string
-	// DataDir, if set, receives raw-sample archives under runs/{id}/.
-	DataDir string
+	// Artifacts, if set, receives each run's raw-sample archive.
+	Artifacts artifacts.Store
 	// Notifier, if set, is told about run starts and finishes.
 	Notifier RunNotifier
 }
@@ -57,6 +58,7 @@ type startRunRequest struct {
 
 // Limits on per-run overrides; beyond these a single machine cannot cope anyway.
 const (
+	maxWorkers     = 64
 	maxRunVUs      = 100000
 	maxRunDuration = 7 * 24 * time.Hour
 )
@@ -84,6 +86,9 @@ func validateParameters(p *db.RunParameters) error {
 	}
 	if p.RPSTarget < 0 {
 		return fmt.Errorf("rps_target must be zero or more")
+	}
+	if p.WorkerCount < 1 || p.WorkerCount > maxWorkers {
+		return fmt.Errorf("worker_count must be between 1 and %d", maxWorkers)
 	}
 	if p.DurationSeconds < 0 || time.Duration(p.DurationSeconds)*time.Second > maxRunDuration {
 		return fmt.Errorf("duration_seconds must be between 0 and %d", int(maxRunDuration.Seconds()))
@@ -141,10 +146,20 @@ func (h *RunHandlers) Start(w http.ResponseWriter, r *http.Request) {
 	params := db.RunParameters{WorkerCount: 1}
 	if req.Parameters != nil {
 		params = *req.Parameters
+	}
+	if params.WorkerCount <= 0 {
 		params.WorkerCount = 1
 	}
 	if err := validateParameters(&params); err != nil {
 		badRequest(w, "VALIDATION_ERROR", err.Error(), nil)
+		return
+	}
+	if exec := h.engine.Execution(); params.WorkerCount > exec.MaxWorkers {
+		msg := fmt.Sprintf("worker_count can be at most %d", exec.MaxWorkers)
+		if exec.Mode == "local" {
+			msg = "worker_count above 1 needs cluster mode; a local install runs one k6 process"
+		}
+		badRequest(w, "VALIDATION_ERROR", msg, nil)
 		return
 	}
 
@@ -175,7 +190,7 @@ func (h *RunHandlers) Start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	caps := h.engine.Capabilities()
-	compiled, err := compiler.CompileWithOptions(plan, compiler.Options{Managed: true, KV: caps.KV, Overrides: &params})
+	compiled, err := compiler.CompileWithOptions(plan, compiler.Options{Managed: true, KV: caps.KV, Overrides: &params, Instances: params.WorkerCount})
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "COMPILATION_FAILED", err.Error(), nil)
 		return
@@ -206,6 +221,7 @@ func (h *RunHandlers) Start(w http.ResponseWriter, r *http.Request) {
 		RunID:           run.ID,
 		Script:          compiled.Script,
 		Env:             envVars,
+		Instances:       params.WorkerCount,
 		MaxVUs:          compiled.MaxVUs,
 		PlannedDuration: compiled.PlannedDuration,
 		MaxDuration:     compiled.MaxDuration,
@@ -222,8 +238,9 @@ func (h *RunHandlers) Start(w http.ResponseWriter, r *http.Request) {
 		spec.ControlURL = h.ControlBaseURL + "/api/v1/runs/" + run.ID + "/control-state"
 		spec.ControlToken = randomToken()
 	}
-	if h.DataDir != "" {
-		spec.RawSamplesPath = filepath.Join(h.DataDir, "runs", run.ID, "samples.jsonl.gz")
+	if h.Artifacts != nil {
+		key := artifacts.RunSamplesKey(run.ID)
+		spec.RawSamples = func() (io.WriteCloser, error) { return h.Artifacts.Create(context.Background(), key) }
 	}
 
 	runID := run.ID
@@ -354,8 +371,10 @@ func (h *RunHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 		notFound(w, "RUN", id)
 		return
 	}
-	if h.DataDir != "" {
-		os.RemoveAll(filepath.Join(h.DataDir, "runs", id))
+	if h.Artifacts != nil {
+		if err := h.Artifacts.DeletePrefix(r.Context(), artifacts.RunPrefix(id)); err != nil {
+			log.Printf("run %s: delete artifacts: %v", id, err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

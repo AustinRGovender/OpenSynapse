@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/artifacts"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/auth"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/engine"
@@ -80,12 +81,16 @@ func NewTestServerWith(t *testing.T, opts Options) *TestServer {
 	ws := wsserver.New()
 	ws.Authenticate = func(t string) bool { _, ok := authSvc.Authenticate(t); return ok }
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, envStore, opts.Engine, ws)
-	runHandlers.DataDir = opts.DataDir
+	var store artifacts.Store
+	if opts.DataDir != "" {
+		store = artifacts.NewDir(opts.DataDir)
+	}
+	runHandlers.Artifacts = store
 
 	playground := handlers.NewPlaygroundHandlers(collectionStore)
 	playground.Envs = envStore
 	playground.Engine = opts.Engine
-	system := &handlers.SystemHandlers{Engine: opts.Engine, WS: ws, Mode: "desktop", DataDir: opts.DataDir}
+	system := &handlers.SystemHandlers{Engine: opts.Engine, WS: ws, Mode: "desktop", DataDir: opts.DataDir, Database: "sqlite (in memory)", Artifacts: store}
 	deps := router.Deps{
 		Plans:      handlers.NewPlanHandlers(planStore),
 		Envs:       handlers.NewEnvironmentHandlers(envStore),

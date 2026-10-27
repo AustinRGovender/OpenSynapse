@@ -92,7 +92,11 @@ type aggregator struct {
 
 	currentVUs int
 	peakVUs    int
-	// vuOffset is subtracted from k6's VU gauge to hide the internal control VU.
+	// instanceVUs is each k6 instance's latest VU gauge; the run's VU count
+	// is their sum.
+	instanceVUs map[string]int
+	// vuOffset is subtracted from each instance's VU gauge to hide its
+	// internal control VU.
 	vuOffset int
 }
 
@@ -103,6 +107,8 @@ func newAggregator(vuOffset int) *aggregator {
 		endpoints: make(map[string]*endpointAgg),
 		checks:    make(map[string]*checkAgg),
 		vuOffset:  vuOffset,
+
+		instanceVUs: make(map[string]int),
 	}
 }
 
@@ -115,9 +121,10 @@ func (a *aggregator) bucket(sec int64) *secondBucket {
 	return b
 }
 
-// ingest parses one JSON line. It reports whether the line carried a sample
-// that should be kept in the raw-sample archive.
-func (a *aggregator) ingest(line []byte) bool {
+// ingest parses one JSON line from the named k6 instance ("" for a single
+// local process). It reports whether the line carried a sample that should
+// be kept in the raw-sample archive.
+func (a *aggregator) ingest(instance string, line []byte) bool {
 	var l k6Line
 	if err := json.Unmarshal(line, &l); err != nil || l.Type != "Point" {
 		return false
@@ -183,9 +190,14 @@ func (a *aggregator) ingest(line []byte) bool {
 		a.bytesRecv += v
 		a.bucket(sec).bytesRecv += v
 	case "vus":
-		n := int(v) - a.vuOffset
-		if n < 0 {
-			n = 0
+		own := int(v) - a.vuOffset
+		if own < 0 {
+			own = 0
+		}
+		a.instanceVUs[instance] = own
+		n := 0
+		for _, c := range a.instanceVUs {
+			n += c
 		}
 		b := a.bucket(sec)
 		b.vus, b.hasVUs = n, true

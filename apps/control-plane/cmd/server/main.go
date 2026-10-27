@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"log"
 	"log/slog"
@@ -13,12 +15,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/artifacts"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/auth"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/config"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/engine"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/handlers"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/httpx"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/kube"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/notify"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/observability"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/router"
@@ -47,11 +51,35 @@ func main() {
 		log.Fatalf("configuration: %v", err)
 	}
 
-	database, err := db.Open(cfg.DBPath)
+	// SQLite in the data directory, or Postgres when DB_DSN is set (cluster mode).
+	var database *sql.DB
+	dbDescription := cfg.DBPath
+	dbSize := func() int64 { return fileSize(cfg.DBPath) + fileSize(cfg.DBPath+"-wal") }
+	if cfg.DBDSN != "" {
+		database, err = db.OpenPostgres(cfg.DBDSN)
+		dbDescription = "postgres"
+		dbSize = func() int64 { return db.PostgresSize(database) }
+	} else {
+		database, err = db.Open(cfg.DBPath)
+	}
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
 	defer database.Close()
+
+	// Raw run samples: the data directory, or S3-compatible storage when
+	// MINIO_ENDPOINT is set.
+	var store artifacts.Store = artifacts.NewDir(cfg.DataDir)
+	if cfg.MinIOEndpoint != "" {
+		s3, err := artifacts.NewS3(context.Background(), artifacts.S3Config{
+			Endpoint: cfg.MinIOEndpoint, Bucket: cfg.MinIOBucket,
+			AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey, UseSSL: cfg.MinIOUseSSL,
+		})
+		if err != nil {
+			log.Fatalf("object storage: %v", err)
+		}
+		store = s3
+	}
 
 	box, err := secrets.Load(cfg.DataDir)
 	if err != nil {
@@ -110,6 +138,30 @@ func main() {
 	if err != nil {
 		slog.Warn("k6 engine not available; run execution is disabled until k6 is installed", "error", err)
 	}
+	if eng != nil && cfg.Mode == config.ModeCluster {
+		kc, err := kube.InCluster()
+		if err != nil {
+			log.Fatalf("cluster mode: %v", err)
+		}
+		kcfg := engine.KubernetesConfig{
+			Client:          kc,
+			RunnerImage:     cfg.RunnerImage,
+			ImagePullPolicy: cfg.RunnerPullPolicy,
+			MaxWorkers:      cfg.MaxWorkers,
+		}
+		if cfg.RunnerResources != "" {
+			if err := json.Unmarshal([]byte(cfg.RunnerResources), &kcfg.RunnerResources); err != nil {
+				log.Fatalf("OPENSYNAPSE_RUNNER_RESOURCES: %v", err)
+			}
+		}
+		eng.UseKubernetes(kcfg)
+		if n, err := engine.CleanupOrphans(context.Background(), kc); err != nil {
+			slog.Warn("could not remove TestRuns left by a previous control plane", "error", err)
+		} else if n > 0 {
+			slog.Info("removed TestRuns left by a previous control plane", "count", n)
+		}
+		slog.Info("cluster mode: runs execute as k6-operator TestRuns", "namespace", kc.Namespace(), "runner_image", cfg.RunnerImage, "max_workers", cfg.MaxWorkers)
+	}
 
 	security := httpx.SecurityConfig{AllowedHosts: cfg.AllowedHosts, AllowedOrigins: cfg.AllowedOrigins}
 
@@ -122,11 +174,12 @@ func main() {
 
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, envStore, eng, ws)
 	runHandlers.ControlBaseURL = cfg.ControlURL
-	runHandlers.DataDir = cfg.DataDir
+	runHandlers.Artifacts = store
 	runHandlers.Notifier = runNotifier{hooks: &notify.Webhooks{Settings: settingsStore, PublicURL: os.Getenv("OPENSYNAPSE_PUBLIC_URL")}}
 
 	system := &handlers.SystemHandlers{
-		Engine: eng, WS: ws, DataDir: cfg.DataDir, DBPath: cfg.DBPath,
+		Engine: eng, WS: ws, DataDir: cfg.DataDir,
+		Database: dbDescription, DatabaseSize: dbSize, Artifacts: store,
 		Mode: string(cfg.Mode), TeamMode: cfg.TeamMode,
 	}
 	settingsHandlers := handlers.NewSettingsHandlers(settingsStore, runStore, system)
@@ -215,6 +268,13 @@ func main() {
 // bootstrapAdmin creates the first admin from OPENSYNAPSE_ADMIN_EMAIL and
 // OPENSYNAPSE_ADMIN_PASSWORD when team mode starts with no users. Without
 // them, the UI offers a one-time "create admin account" screen instead.
+func fileSize(path string) int64 {
+	if info, err := os.Stat(path); err == nil {
+		return info.Size()
+	}
+	return 0
+}
+
 // testAPIsInDocker reports whether the built-in plans should target the test
 // APIs by Docker service name. OPENSYNAPSE_TEST_APIS=docker|localhost decides;
 // unset, a container that can resolve the echo-api service (as under

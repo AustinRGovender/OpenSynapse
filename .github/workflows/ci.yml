@@ -32,6 +32,36 @@ jobs:
       - name: Vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  go-postgres:
+    name: Go tests on Postgres (cluster-mode database)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/control-plane
+    env:
+      # Every test database becomes a fresh schema in this Postgres.
+      OPENSYNAPSE_TEST_POSTGRES_DSN: postgres://postgres:ci@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/control-plane/go.mod
+
+      - name: Test
+        run: go test ./... -count=1
+
   web:
     name: Web (React SPA)
     runs-on: ubuntu-latest
@@ -98,6 +128,9 @@ jobs:
 
       - name: Install Helm
         uses: azure/setup-helm@v5
+
+      - name: Fetch chart dependencies (k6-operator)
+        run: helm dependency update deploy/helm/
 
       - name: Lint chart
         run: helm lint deploy/helm/
