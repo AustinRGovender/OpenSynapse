@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"strings"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -197,7 +198,7 @@ func TestExportCSV(t *testing.T) {
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if ct != "text/csv" {
+	if !strings.HasPrefix(ct, "text/csv") {
 		t.Fatalf("expected text/csv, got %s", ct)
 	}
 	resp.Body.Close()
@@ -218,7 +219,7 @@ func TestExportHTML(t *testing.T) {
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if ct != "text/html" {
+	if !strings.HasPrefix(ct, "text/html") {
 		t.Fatalf("expected text/html, got %s", ct)
 	}
 	resp.Body.Close()

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -14,9 +15,17 @@ var migrationFS embed.FS
 
 // Open opens or creates a SQLite database at the given path and runs migrations.
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	// busy_timeout lets concurrent writers (two runs finishing at once) wait
+	// for the lock instead of failing immediately with SQLITE_BUSY.
+	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(10000)")
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
+	}
+
+	if path == ":memory:" {
+		// Every connection to :memory: is a separate database; pin to one so
+		// migrations and queries all see the same data.
+		db.SetMaxOpenConns(1)
 	}
 
 	if err := db.Ping(); err != nil {
@@ -35,12 +44,7 @@ func Open(path string) (*sql.DB, error) {
 // OpenMemory opens an in-memory SQLite database with migrations applied.
 // MaxOpenConns is set to 1 to ensure all goroutines share the same in-memory database.
 func OpenMemory() (*sql.DB, error) {
-	db, err := Open(":memory:")
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	return db, nil
+	return Open(":memory:")
 }
 
 func migrate(db *sql.DB) error {
@@ -96,25 +100,63 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
 
-		tx, err := db.Begin()
-		if err != nil {
-			return fmt.Errorf("begin tx for migration %d: %w", version, err)
-		}
-
-		if _, err := tx.Exec(string(content)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("execute migration %d: %w", version, err)
-		}
-
-		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", version); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("record migration %d: %w", version, err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %d: %w", version, err)
+		if err := applyMigration(db, version, string(content)); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// fkOffMarker opts a migration into running with foreign keys disabled,
+// which SQLite requires for table rebuilds (otherwise DROP TABLE cascades).
+const fkOffMarker = "-- opensynapse:foreign-keys-off"
+
+func applyMigration(db *sql.DB, version int, content string) error {
+	ctx := context.Background()
+	// A dedicated connection: PRAGMA foreign_keys is per-connection and
+	// cannot change inside a transaction.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for migration %d: %w", version, err)
+	}
+	defer conn.Close()
+
+	fkOff := strings.HasPrefix(content, fkOffMarker)
+	if fkOff {
+		if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+			return fmt.Errorf("disable foreign keys for migration %d: %w", version, err)
+		}
+		defer conn.ExecContext(ctx, "PRAGMA foreign_keys=ON")
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx for migration %d: %w", version, err)
+	}
+	if _, err := tx.Exec(content); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("execute migration %d: %w", version, err)
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", version); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("record migration %d: %w", version, err)
+	}
+	if fkOff {
+		rows, err := tx.Query("PRAGMA foreign_key_check")
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("foreign key check for migration %d: %w", version, err)
+		}
+		bad := rows.Next()
+		rows.Close()
+		if bad {
+			tx.Rollback()
+			return fmt.Errorf("migration %d left foreign key violations", version)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration %d: %w", version, err)
+	}
 	return nil
 }

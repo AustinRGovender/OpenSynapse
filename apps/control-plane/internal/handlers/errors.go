@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -37,7 +38,10 @@ func badRequest(w http.ResponseWriter, code, message string, details interface{}
 	writeError(w, http.StatusBadRequest, code, message, details)
 }
 
+// internalError logs the cause server-side and returns a generic message;
+// details never reach the client (no stack traces in the UI).
 func internalError(w http.ResponseWriter, err error) {
+	log.Printf("internal error: %v", err)
 	writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-		"An internal error occurred", nil)
+		"An internal error occurred. Check the control-plane log for details.", nil)
 }

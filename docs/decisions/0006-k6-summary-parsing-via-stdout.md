@@ -1,7 +1,7 @@
 # ADR-0006: Parse k6 run summary from stdout (not `handleSummary` / `--summary-export`)
 
 **Date:** 2026-04-16
-**Status:** accepted
+**Status:** superseded by ADR-0010
 **Authors:** OpenSynapse team
 
 ## Context

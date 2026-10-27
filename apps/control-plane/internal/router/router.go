@@ -7,97 +7,123 @@ import (
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/wsserver"
 )
 
-// New creates and returns the HTTP router with all routes registered.
-func New(plans *handlers.PlanHandlers, envs *handlers.EnvironmentHandlers, runs *handlers.RunHandlers, reports *handlers.ReportHandlers, exports *handlers.ExportHandlers, playground *handlers.PlaygroundHandlers, crawls *handlers.CrawlHandlers, aiHandlers *handlers.AIHandlers, frags *handlers.FragmentHandlers, imports *handlers.ImportHandlers, ws *wsserver.Server) http.Handler {
-	mux := http.NewServeMux()
+// Deps holds every handler group the router mounts.
+type Deps struct {
+	Plans      *handlers.PlanHandlers
+	Envs       *handlers.EnvironmentHandlers
+	Runs       *handlers.RunHandlers
+	Reports    *handlers.ReportHandlers
+	Exports    *handlers.ExportHandlers
+	Playground *handlers.PlaygroundHandlers
+	Crawls     *handlers.CrawlHandlers
+	AI         *handlers.AIHandlers
+	Fragments  *handlers.FragmentHandlers
+	Imports    *handlers.ImportHandlers
+	System     *handlers.SystemHandlers
+	WS         *wsserver.Server
 
-	// System endpoints
-	mux.HandleFunc("GET /health", handlers.Health)
-	mux.HandleFunc("GET /ready", handlers.Ready)
-	mux.HandleFunc("GET /version", handlers.Version)
-
-	// Plans API (section 2.1)
-	mux.HandleFunc("GET /api/v1/plans", plans.List)
-	mux.HandleFunc("POST /api/v1/plans", plans.Create)
-	mux.HandleFunc("GET /api/v1/plans/{id}", plans.Get)
-	mux.HandleFunc("PUT /api/v1/plans/{id}", plans.Update)
-	mux.HandleFunc("DELETE /api/v1/plans/{id}", plans.Delete)
-	mux.HandleFunc("GET /api/v1/plans/{id}/versions", plans.ListVersions)
-	mux.HandleFunc("GET /api/v1/plans/{id}/versions/{version}", plans.GetVersion)
-	mux.HandleFunc("POST /api/v1/plans/{id}/validate", plans.Validate)
-	mux.HandleFunc("POST /api/v1/plans/{id}/compile", plans.Compile)
-	mux.HandleFunc("POST /api/v1/plans/import/jmx", imports.ImportJMX)
-
-	// Environments API (section 2.2)
-	mux.HandleFunc("GET /api/v1/environments", envs.List)
-	mux.HandleFunc("POST /api/v1/environments", envs.Create)
-	mux.HandleFunc("GET /api/v1/environments/{id}", envs.Get)
-	mux.HandleFunc("PUT /api/v1/environments/{id}", envs.Update)
-	mux.HandleFunc("DELETE /api/v1/environments/{id}", envs.Delete)
-
-	// Runs API (section 2.3)
-	mux.HandleFunc("GET /api/v1/runs", runs.List)
-	mux.HandleFunc("POST /api/v1/runs", runs.Start)
-	mux.HandleFunc("GET /api/v1/runs/{id}", runs.Get)
-	mux.HandleFunc("DELETE /api/v1/runs/{id}", runs.Delete)
-	mux.HandleFunc("GET /api/v1/runs/{id}/events", runs.ListEvents)
-	mux.HandleFunc("POST /api/v1/runs/{id}/events", runs.AddEvent)
-	mux.HandleFunc("PATCH /api/v1/runs/{id}/control", runs.Control)
-	mux.HandleFunc("POST /api/v1/runs/{id}/stop", runs.Stop)
-	mux.HandleFunc("POST /api/v1/runs/{id}/kill", runs.Kill)
-	mux.HandleFunc("POST /api/v1/runs/{id}/export", exports.ExportRun)
-
-	// Comparison & Reports API (section 2.4)
-	mux.HandleFunc("POST /api/v1/compare", reports.Compare)
-	mux.HandleFunc("GET /api/v1/reports", reports.List)
-	mux.HandleFunc("POST /api/v1/reports", reports.Create)
-	mux.HandleFunc("GET /api/v1/reports/{id}", reports.Get)
-	mux.HandleFunc("DELETE /api/v1/reports/{id}", reports.Delete)
-
-	// Playground API (section 2.8)
-	mux.HandleFunc("POST /api/v1/playground/request", playground.ExecuteRequest)
-	mux.HandleFunc("GET /api/v1/playground/collections", playground.ListCollections)
-	mux.HandleFunc("POST /api/v1/playground/collections", playground.CreateCollection)
-
-	// Crawler API (section 2.6)
-	mux.HandleFunc("POST /api/v1/crawls", crawls.Start)
-	mux.HandleFunc("GET /api/v1/crawls/{id}", crawls.Get)
-	mux.HandleFunc("GET /api/v1/crawls/{id}/graph", crawls.GetGraph)
-	mux.HandleFunc("POST /api/v1/crawls/{id}/generate-plan", crawls.GeneratePlan)
-	mux.HandleFunc("POST /api/v1/crawls/{id}/cancel", crawls.Cancel)
-
-	// AI API (section 2.7)
-	mux.HandleFunc("GET /api/v1/ai/config", aiHandlers.GetConfig)
-	mux.HandleFunc("PUT /api/v1/ai/config", aiHandlers.UpdateConfig)
-	mux.HandleFunc("POST /api/v1/ai/config/test", aiHandlers.TestConfig)
-	mux.HandleFunc("POST /api/v1/ai/analyse", aiHandlers.Analyse)
-
-	// Fragments API (section 2.5)
-	mux.HandleFunc("GET /api/v1/fragments", frags.List)
-	mux.HandleFunc("POST /api/v1/fragments", frags.Create)
-	mux.HandleFunc("GET /api/v1/fragments/{id}", frags.Get)
-	mux.HandleFunc("PUT /api/v1/fragments/{id}", frags.Update)
-	mux.HandleFunc("DELETE /api/v1/fragments/{id}", frags.Delete)
-
-	// WebSocket
-	if ws != nil {
-		mux.HandleFunc("/api/v1/ws", ws.HandleWS)
-	}
-
-	return corsMiddleware(mux)
+	// Middleware wraps the whole mux (security, auth, logging, metrics).
+	Middleware []func(http.Handler) http.Handler
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+// Routes is every route the API serves, as "METHOD /path" patterns. It is
+// the source of truth the OpenAPI drift test checks against.
+var Routes []string
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+// New creates and returns the HTTP router with all routes registered.
+func New(d Deps) http.Handler {
+	mux := http.NewServeMux()
+	Routes = Routes[:0]
+	handle := func(pattern string, h http.HandlerFunc) {
+		Routes = append(Routes, pattern)
+		mux.HandleFunc(pattern, h)
+	}
 
-		next.ServeHTTP(w, r)
-	})
+	// System endpoints
+	handle("GET /health", handlers.Health)
+	handle("GET /ready", handlers.Ready)
+	handle("GET /version", handlers.Version)
+	if d.System != nil {
+		handle("GET /api/v1/system/info", d.System.Info)
+	}
+
+	// Plans API (section 2.1)
+	handle("GET /api/v1/plans", d.Plans.List)
+	handle("POST /api/v1/plans", d.Plans.Create)
+	handle("GET /api/v1/plans/{id}", d.Plans.Get)
+	handle("PUT /api/v1/plans/{id}", d.Plans.Update)
+	handle("DELETE /api/v1/plans/{id}", d.Plans.Delete)
+	handle("GET /api/v1/plans/{id}/versions", d.Plans.ListVersions)
+	handle("GET /api/v1/plans/{id}/versions/{version}", d.Plans.GetVersion)
+	handle("POST /api/v1/plans/{id}/validate", d.Plans.Validate)
+	handle("POST /api/v1/plans/{id}/compile", d.Plans.Compile)
+	handle("POST /api/v1/plans/import/jmx", d.Imports.ImportJMX)
+
+	// Environments API (section 2.2)
+	handle("GET /api/v1/environments", d.Envs.List)
+	handle("POST /api/v1/environments", d.Envs.Create)
+	handle("GET /api/v1/environments/{id}", d.Envs.Get)
+	handle("PUT /api/v1/environments/{id}", d.Envs.Update)
+	handle("DELETE /api/v1/environments/{id}", d.Envs.Delete)
+
+	// Runs API (section 2.3)
+	handle("GET /api/v1/runs", d.Runs.List)
+	handle("POST /api/v1/runs", d.Runs.Start)
+	handle("GET /api/v1/runs/{id}", d.Runs.Get)
+	handle("DELETE /api/v1/runs/{id}", d.Runs.Delete)
+	handle("GET /api/v1/runs/{id}/samples", d.Runs.Samples)
+	handle("GET /api/v1/runs/{id}/errors", d.Runs.Errors)
+	handle("GET /api/v1/runs/{id}/report", d.Runs.Report)
+	handle("GET /api/v1/runs/{id}/live", d.Runs.Live)
+	handle("GET /api/v1/runs/{id}/events", d.Runs.ListEvents)
+	handle("POST /api/v1/runs/{id}/events", d.Runs.AddEvent)
+	handle("PATCH /api/v1/runs/{id}/control", d.Runs.Control)
+	handle("GET /api/v1/runs/{id}/control-state", d.Runs.ControlState)
+	handle("POST /api/v1/runs/{id}/stop", d.Runs.Stop)
+	handle("POST /api/v1/runs/{id}/kill", d.Runs.Kill)
+	handle("POST /api/v1/runs/{id}/export", d.Exports.ExportRun)
+
+	// Comparison & Reports API (section 2.4)
+	handle("POST /api/v1/compare", d.Reports.Compare)
+	handle("GET /api/v1/reports", d.Reports.List)
+	handle("POST /api/v1/reports", d.Reports.Create)
+	handle("GET /api/v1/reports/{id}", d.Reports.Get)
+	handle("DELETE /api/v1/reports/{id}", d.Reports.Delete)
+
+	// Playground API (section 2.8)
+	handle("POST /api/v1/playground/request", d.Playground.ExecuteRequest)
+	handle("GET /api/v1/playground/collections", d.Playground.ListCollections)
+	handle("POST /api/v1/playground/collections", d.Playground.CreateCollection)
+
+	// Crawler API (section 2.6)
+	handle("POST /api/v1/crawls", d.Crawls.Start)
+	handle("GET /api/v1/crawls/{id}", d.Crawls.Get)
+	handle("GET /api/v1/crawls/{id}/graph", d.Crawls.GetGraph)
+	handle("POST /api/v1/crawls/{id}/generate-plan", d.Crawls.GeneratePlan)
+	handle("POST /api/v1/crawls/{id}/cancel", d.Crawls.Cancel)
+
+	// AI API (section 2.7)
+	handle("GET /api/v1/ai/config", d.AI.GetConfig)
+	handle("PUT /api/v1/ai/config", d.AI.UpdateConfig)
+	handle("POST /api/v1/ai/config/test", d.AI.TestConfig)
+	handle("POST /api/v1/ai/preview", d.AI.Preview)
+	handle("POST /api/v1/ai/analyse", d.AI.Analyse)
+
+	// Fragments API (section 2.5)
+	handle("GET /api/v1/fragments", d.Fragments.List)
+	handle("POST /api/v1/fragments", d.Fragments.Create)
+	handle("GET /api/v1/fragments/{id}", d.Fragments.Get)
+	handle("PUT /api/v1/fragments/{id}", d.Fragments.Update)
+	handle("DELETE /api/v1/fragments/{id}", d.Fragments.Delete)
+
+	// WebSocket
+	if d.WS != nil {
+		handle("GET /api/v1/ws", d.WS.HandleWS)
+	}
+
+	var h http.Handler = mux
+	for i := len(d.Middleware) - 1; i >= 0; i-- {
+		h = d.Middleware[i](h)
+	}
+	return h
 }

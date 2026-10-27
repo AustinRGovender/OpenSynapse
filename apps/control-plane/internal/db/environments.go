@@ -22,6 +22,23 @@ type Environment struct {
 	UpdatedAt time.Time           `json:"updated_at"`
 }
 
+// RedactedValue replaces secret variable values in API responses and run
+// snapshots. Sending it back on update keeps the stored value.
+const RedactedValue = "********"
+
+// Redacted returns a copy with secret variable values hidden.
+func (e *Environment) Redacted() *Environment {
+	out := *e
+	out.Variables = make(map[string]Variable, len(e.Variables))
+	for k, v := range e.Variables {
+		if v.Secret {
+			v.Value = RedactedValue
+		}
+		out.Variables[k] = v
+	}
+	return &out
+}
+
 type EnvironmentStore struct {
 	db *sql.DB
 }

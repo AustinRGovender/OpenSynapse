@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
+	localbrowser "github.com/opensynapse/opensynapse/apps/control-plane/internal/browser"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/ysmood/gson"
 )
@@ -21,16 +21,11 @@ type RodEngine struct{}
 func (e *RodEngine) Name() string { return "rod" }
 
 func (e *RodEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress ProgressCallback) (db.CrawlGraph, []db.CapturedRequest, error) {
-	l, err := launcher.New().Headless(true).Launch()
+	browser, cleanup, err := localbrowser.Launch()
 	if err != nil {
 		return db.CrawlGraph{}, nil, fmt.Errorf("launch browser: %w", err)
 	}
-
-	browser := rod.New().ControlURL(l)
-	if err := browser.Connect(); err != nil {
-		return db.CrawlGraph{}, nil, fmt.Errorf("connect browser: %w", err)
-	}
-	defer browser.Close()
+	defer cleanup()
 
 	var mu sync.Mutex
 	var nodes []db.CrawlGraphNode

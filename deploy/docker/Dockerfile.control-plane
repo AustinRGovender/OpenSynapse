@@ -26,9 +26,12 @@ RUN xk6 build ${K6_RELEASE} --with github.com/oleiade/xk6-kv@${XK6_KV_VERSION} -
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates chromium nss freetype harfbuzz font-noto
+# In a container the bundled test APIs are reached by Compose service name,
+# so the seed plans default to the "Test APIs (Docker)" environment.
 ENV ROD_BROWSER_BIN=/usr/bin/chromium-browser \
     OPENSYNAPSE_BIND=0.0.0.0 \
-    OPENSYNAPSE_DATA_DIR=/data
+    OPENSYNAPSE_DATA_DIR=/data \
+    OPENSYNAPSE_TEST_APIS=docker
 COPY --from=k6-builder /k6 /usr/local/bin/k6
 COPY --from=builder /opensynapse-control /usr/local/bin/opensynapse-control
 VOLUME /data

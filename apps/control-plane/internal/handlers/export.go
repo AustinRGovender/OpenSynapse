@@ -1,19 +1,30 @@
 package handlers
 
 import (
+	"bufio"
+	"compress/gzip"
+	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
-	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/browser"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/report"
 )
 
+// ExportHandlers serve run exports in the four formats from F-08.
 type ExportHandlers struct {
-	runs *db.RunStore
+	runs *RunHandlers
 }
 
-func NewExportHandlers(runs *db.RunStore) *ExportHandlers {
+func NewExportHandlers(runs *RunHandlers) *ExportHandlers {
 	return &ExportHandlers{runs: runs}
 }
 
@@ -24,161 +35,130 @@ type exportRequest struct {
 func (h *ExportHandlers) ExportRun(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	run, err := h.runs.Get(id)
-	if err != nil {
-		internalError(w, err)
-		return
-	}
-	if run == nil {
-		notFound(w, "RUN", id)
-		return
-	}
-
 	var req exportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		badRequest(w, "INVALID_JSON", "Request body is not valid JSON", nil)
 		return
 	}
-
-	switch strings.ToLower(req.Format) {
-	case "json":
-		h.exportJSON(w, run)
-	case "csv":
-		h.exportCSV(w, run)
-	case "html":
-		h.exportHTML(w, run)
-	case "pdf":
-		// PDF requires headless Chromium; for now return the HTML with a note
-		w.Header().Set("Content-Type", "application/json")
-		writeJSON(w, http.StatusOK, map[string]string{
-			"message": "PDF export will be available when headless Chromium is configured. Use HTML export as an alternative.",
-		})
+	format := strings.ToLower(req.Format)
+	switch format {
+	case "json", "csv", "html", "pdf":
 	default:
 		badRequest(w, "INVALID_FORMAT", "Supported formats: json, csv, html, pdf", nil)
-	}
-}
-
-func (h *ExportHandlers) exportJSON(w http.ResponseWriter, run *db.Run) {
-	events, _ := h.runs.ListEvents(run.ID)
-
-	export := map[string]interface{}{
-		"run":    run,
-		"events": events,
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="run-%s.json"`, run.ID[:8]))
-	json.NewEncoder(w).Encode(export)
-}
-
-func (h *ExportHandlers) exportCSV(w http.ResponseWriter, run *db.Run) {
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="run-%s.csv"`, run.ID[:8]))
-
-	// Header
-	fmt.Fprintln(w, "metric,value")
-
-	if run.Summary != nil {
-		s := run.Summary
-		fmt.Fprintf(w, "total_requests,%d\n", s.TotalRequests)
-		fmt.Fprintf(w, "failed_requests,%d\n", s.FailedRequests)
-		fmt.Fprintf(w, "error_rate,%.4f\n", s.ErrorRate)
-		fmt.Fprintf(w, "throughput_rps,%.2f\n", s.ThroughputRPS)
-		fmt.Fprintf(w, "p50_ms,%.2f\n", s.P50MS)
-		fmt.Fprintf(w, "p90_ms,%.2f\n", s.P90MS)
-		fmt.Fprintf(w, "p95_ms,%.2f\n", s.P95MS)
-		fmt.Fprintf(w, "p99_ms,%.2f\n", s.P99MS)
-		fmt.Fprintf(w, "max_ms,%.2f\n", s.MaxMS)
-		fmt.Fprintf(w, "bytes_sent,%d\n", s.BytesSent)
-		fmt.Fprintf(w, "bytes_received,%d\n", s.BytesReceived)
+	doc, err := h.runs.BuildReport(id)
+	if err != nil {
+		internalError(w, err)
+		return
 	}
-}
-
-func (h *ExportHandlers) exportHTML(w http.ResponseWriter, run *db.Run) {
-	events, _ := h.runs.ListEvents(run.ID)
-
-	runJSON, _ := json.Marshal(run)
-	eventsJSON, _ := json.Marshal(events)
-
-	summaryHTML := ""
-	if run.Summary != nil {
-		s := run.Summary
-		summaryHTML = fmt.Sprintf(`
-		<div class="metrics">
-			<div class="card"><div class="label">Total Requests</div><div class="value">%d</div></div>
-			<div class="card"><div class="label">Failed</div><div class="value">%d</div></div>
-			<div class="card"><div class="label">Error Rate</div><div class="value">%.2f%%</div></div>
-			<div class="card"><div class="label">Throughput</div><div class="value">%.1f rps</div></div>
-			<div class="card"><div class="label">p95</div><div class="value">%.1f ms</div></div>
-			<div class="card"><div class="label">p99</div><div class="value">%.1f ms</div></div>
-		</div>`,
-			s.TotalRequests, s.FailedRequests, s.ErrorRate*100,
-			s.ThroughputRPS, s.P95MS, s.P99MS)
+	if doc == nil {
+		notFound(w, "RUN", id)
+		return
 	}
+	name := "opensynapse-run-" + id[:min(8, len(id))]
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>OpenSynapse Run Report — %s</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Inter, -apple-system, system-ui, sans-serif; background: #020617; color: #e2e8f0; padding: 24px; }
-  h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
-  .meta { color: #94a3b8; font-size: 13px; margin-bottom: 24px; }
-  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; }
-  .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-  .value { font-size: 30px; font-weight: 600; margin-top: 4px; }
-  .events { margin-top: 24px; }
-  .events h2 { font-size: 16px; margin-bottom: 8px; }
-  .event { font-size: 13px; color: #94a3b8; padding: 4px 0; border-bottom: 1px solid #1e293b; }
-  .footer { margin-top: 32px; color: #475569; font-size: 11px; text-align: center; }
-</style>
-</head>
-<body>
-<h1>OpenSynapse Run Report</h1>
-<div class="meta">
-  Run ID: %s<br>
-  Plan: %s<br>
-  Status: %s<br>
-  Started: %s
-</div>
-%s
-<div class="events">
-  <h2>Timeline</h2>
-  <div id="event-list"></div>
-</div>
-<div class="footer">Generated by OpenSynapse</div>
-<script>
-  const run = %s;
-  const events = %s;
-  const el = document.getElementById('event-list');
-  events.forEach(e => {
-    const div = document.createElement('div');
-    div.className = 'event';
-    div.textContent = new Date(e.timestamp_ms).toLocaleTimeString() + ' — ' + e.type;
-    el.appendChild(div);
-  });
-</script>
-</body>
-</html>`,
-		run.ID[:8],
-		run.ID,
-		run.PlanID,
-		run.Status,
-		func() string {
-			if run.StartedAt != nil {
-				return run.StartedAt.Format("2006-01-02 15:04:05")
+	switch format {
+	case "json":
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.json"`, name))
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		enc.Encode(doc)
+	case "csv":
+		h.exportCSV(w, doc, name)
+	case "html":
+		html, err := report.RenderHTML(doc)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.html"`, name))
+		w.Write(html)
+	case "pdf":
+		html, err := report.RenderHTML(doc)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		pdf, err := report.RenderPDF(html)
+		if err != nil {
+			if errors.Is(err, browser.ErrNotFound) {
+				writeError(w, http.StatusServiceUnavailable, "PDF_UNAVAILABLE",
+					"PDF export needs Chrome or Chromium on the control-plane host (bundled in the Docker image). Set ROD_BROWSER_BIN or use HTML export.", nil)
+				return
 			}
-			return "N/A"
-		}(),
-		summaryHTML,
-		string(runJSON),
-		string(eventsJSON),
-	)
+			writeError(w, http.StatusInternalServerError, "PDF_FAILED", "Rendering the PDF failed: "+err.Error(), nil)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.pdf"`, name))
+		w.Write(pdf)
+	}
+}
 
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="run-%s.html"`, run.ID[:8]))
-	fmt.Fprint(w, html)
+// exportCSV streams one row per raw sample (timestamp, metric, value, tags)
+// when the raw archive exists, falling back to the per-second series.
+func (h *ExportHandlers) exportCSV(w http.ResponseWriter, doc *RunReport, name string) {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.csv"`, name))
+	cw := csv.NewWriter(w)
+	defer cw.Flush()
+
+	if h.runs.DataDir != "" {
+		path := filepath.Join(h.runs.DataDir, "runs", doc.Run.ID, "samples.jsonl.gz")
+		if f, err := os.Open(path); err == nil {
+			defer f.Close()
+			if gz, err := gzip.NewReader(f); err == nil {
+				defer gz.Close()
+				cw.Write([]string{"timestamp", "metric", "value", "tags"})
+				s := bufio.NewScanner(gz)
+				s.Buffer(make([]byte, 64*1024), 4*1024*1024)
+				for s.Scan() {
+					var line struct {
+						Metric string `json:"metric"`
+						Data   struct {
+							Time  time.Time         `json:"time"`
+							Value float64           `json:"value"`
+							Tags  map[string]string `json:"tags"`
+						} `json:"data"`
+					}
+					if json.Unmarshal(s.Bytes(), &line) != nil {
+						continue
+					}
+					keys := make([]string, 0, len(line.Data.Tags))
+					for k := range line.Data.Tags {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					tags := make([]string, 0, len(keys))
+					for _, k := range keys {
+						tags = append(tags, k+"="+line.Data.Tags[k])
+					}
+					cw.Write([]string{
+						line.Data.Time.UTC().Format(time.RFC3339Nano),
+						line.Metric,
+						strconv.FormatFloat(line.Data.Value, 'f', -1, 64),
+						strings.Join(tags, ";"),
+					})
+				}
+				return
+			}
+		}
+	}
+
+	// No raw archive (e.g. deleted or never written): per-second aggregates.
+	cw.Write([]string{"timestamp", "requests", "failed", "rps", "error_rate_pct", "p50_ms", "p90_ms", "p95_ms", "p99_ms",
+		"active_vus", "bytes_sent", "bytes_received", "iterations", "checks_passed", "checks_failed"})
+	f := func(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }
+	i := func(v int64) string { return strconv.FormatInt(v, 10) }
+	for _, p := range doc.Series {
+		cw.Write([]string{
+			time.UnixMilli(p.TimestampMS).UTC().Format(time.RFC3339), i(p.Requests), i(p.Failed), f(p.RPS), f(p.ErrorRate),
+			f(p.P50MS), f(p.P90MS), f(p.P95MS), f(p.P99MS), strconv.Itoa(p.ActiveVUs), i(p.BytesSent), i(p.BytesReceived),
+			i(p.Iterations), i(p.ChecksPassed), i(p.ChecksFailed),
+		})
+	}
 }

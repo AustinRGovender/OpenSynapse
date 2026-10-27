@@ -5,69 +5,152 @@
 // Transaction controllers become group() calls. Assertions become check() calls.
 // Data sources become SharedArray imports. The transformer is stateless and
 // deterministic: the same plan always produces the same script bytes.
+//
+// There are two output modes. Standalone mode (Compile) produces a portable
+// script that runs with stock k6 exactly as the plan describes; it is what
+// "Show Script" displays. Managed mode (CompileWithOptions with Managed set)
+// produces the script OpenSynapse actually runs: the plan's VU-based scenario
+// is converted to the externally-controlled executor so the engine can drive
+// its load profile and accept live changes, and — when xk6-kv is available —
+// an internal control scenario feeds RPS limits and the stop flag to VUs.
+// See docs/decisions/0010-run-metrics-and-live-control.md.
 package compiler
 
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 )
 
-// Compile transforms a Plan into a k6 JavaScript string.
+// ControlScenario is the name of the internal live-control scenario; the
+// engine excludes its samples from results.
+const ControlScenario = "__opensynapse_control"
+
+// Options controls how a plan is compiled.
+type Options struct {
+	// Managed produces the script OpenSynapse runs (see package doc).
+	Managed bool
+	// KV adds the xk6-kv control scenario and RPS pacing (managed mode only).
+	KV bool
+	// Overrides are the Run dialog's per-run parameters.
+	Overrides *db.RunParameters
+}
+
+// ProfileStage is one step of a managed VU profile.
+type ProfileStage struct {
+	Duration time.Duration
+	Target   int
+}
+
+// Profile is the VU schedule the engine drives for a managed scenario.
+type Profile struct {
+	StartVUs int
+	Stages   []ProfileStage
+}
+
+// Duration is the profile's total length.
+func (p *Profile) Duration() time.Duration {
+	var d time.Duration
+	for _, s := range p.Stages {
+		d += s.Duration
+	}
+	return d
+}
+
+// Peak is the highest VU count in the profile.
+func (p *Profile) Peak() int {
+	peak := p.StartVUs
+	for _, s := range p.Stages {
+		if s.Target > peak {
+			peak = s.Target
+		}
+	}
+	return peak
+}
+
+// Result is the output of CompileWithOptions.
+type Result struct {
+	Script string
+	// Profile is set when a VU-based scenario was converted for engine control.
+	Profile *Profile
+	// MaxVUs is the VU ceiling the managed scenario starts with.
+	MaxVUs int
+	// PlannedDuration is the run length the engine enforces (0: executors decide).
+	PlannedDuration time.Duration
+	// MaxDuration bounds live "extend" requests.
+	MaxDuration time.Duration
+	// Control reports whether the xk6-kv control scenario was included.
+	Control bool
+}
+
+// Compile transforms a Plan into a standalone k6 JavaScript string.
 func Compile(plan *db.Plan) (string, error) {
-	c := &compiler{
-		imports:      make(map[string][]string),
-		topLevel:     &strings.Builder{},
-		options:      &strings.Builder{},
-		defaultFunc:  &strings.Builder{},
-		dataSources:  &strings.Builder{},
-		needsWS:      false,
-		needsShared:  false,
-		needsExec:    false,
-		extControlled: false,
+	res, err := CompileWithOptions(plan, Options{})
+	if err != nil {
+		return "", err
 	}
+	return res.Script, nil
+}
 
+// CompileWithOptions compiles a plan in standalone or managed mode.
+func CompileWithOptions(plan *db.Plan, opts Options) (*Result, error) {
+	c := newCompiler(opts)
 	if err := c.compilePlan(plan.Root); err != nil {
-		return "", fmt.Errorf("compile plan: %w", err)
+		return nil, fmt.Errorf("compile plan: %w", err)
 	}
-
-	return c.render(), nil
+	return c.result(), nil
 }
 
 // CompileNode compiles a single root node (useful for testing individual node types).
 func CompileNode(node db.Node) (string, error) {
-	c := &compiler{
-		imports:      make(map[string][]string),
-		topLevel:     &strings.Builder{},
-		options:      &strings.Builder{},
-		defaultFunc:  &strings.Builder{},
-		dataSources:  &strings.Builder{},
-		needsWS:      false,
-		needsShared:  false,
-		needsExec:    false,
-		extControlled: false,
-	}
-
+	c := newCompiler(Options{})
 	if err := c.emitNode(node, 1); err != nil {
 		return "", fmt.Errorf("compile node: %w", err)
 	}
-
 	return c.render(), nil
 }
 
+func newCompiler(opts Options) *compiler {
+	main := &strings.Builder{}
+	return &compiler{
+		imports:     make(map[string][]string),
+		dataSources: &strings.Builder{},
+		mainFunc:    main,
+		defaultFunc: main,
+		opts:        opts,
+	}
+}
+
 type compiler struct {
-	imports       map[string][]string // module -> named imports
-	topLevel      *strings.Builder    // top-level code (SharedArray, etc.)
-	options       *strings.Builder    // export let options = { ... }
-	defaultFunc   *strings.Builder    // body of export default function()
-	dataSources   *strings.Builder    // SharedArray declarations
-	needsWS       bool
-	needsShared   bool
-	needsExec     bool
-	extControlled bool
+	imports     map[string][]string // module -> named imports
+	dataSources *strings.Builder    // SharedArray declarations
+	// defaultFunc is the function body currently being emitted into.
+	defaultFunc *strings.Builder
+	// mainFunc collects plan-level nodes that sit outside any scenario.
+	mainFunc  *strings.Builder
+	scenarios []*scenarioOut
+
+	needsWS     bool
+	needsShared bool
+	needsExec   bool
+	needsVars   bool
+
+	opts    Options
+	control bool // emit the xk6-kv control scenario and pacing
+	result_ Result
+}
+
+type scenarioOut struct {
+	key     string // k6 scenario key
+	fn      string // exported exec function name
+	options []string
+	body    *strings.Builder
 }
 
 // addImport registers a named import from a module, deduplicating.
@@ -80,9 +163,31 @@ func (c *compiler) addImport(module, name string) {
 	c.imports[module] = append(c.imports[module], name)
 }
 
-// indent returns n tabs of indentation.
+// indent returns n levels of indentation.
 func indent(n int) string {
 	return strings.Repeat("  ", n)
+}
+
+type scenarioProps struct {
+	Executor     string  `json:"executor"`
+	VUs          int     `json:"vus"`
+	StartVUs     *int    `json:"start_vus"`
+	MaxVUs       int     `json:"max_vus"`
+	Duration     string  `json:"duration"`
+	Iterations   int     `json:"iterations"`
+	Rate         int     `json:"rate"`
+	TimeUnit     string  `json:"time_unit"`
+	PreAllocVUs  int     `json:"pre_allocated_vus"`
+	GracefulStop string  `json:"graceful_stop"`
+	Stages       []stage `json:"stages"`
+}
+
+func isVUBased(executor string) bool {
+	switch executor {
+	case "constant-vus", "ramping-vus", "externally-controlled":
+		return true
+	}
+	return false
 }
 
 // compilePlan handles the root plan node.
@@ -91,8 +196,9 @@ func (c *compiler) compilePlan(root db.Node) error {
 		return fmt.Errorf("expected root node type 'plan', got %q", root.Type)
 	}
 
-	// First pass: collect data sources and environment bindings at the plan level,
-	// and identify scenarios.
+	// Pass 1: data sources and scenario discovery.
+	var scenarios []db.Node
+	var loose []db.Node
 	for _, child := range root.Children {
 		if !child.Enabled {
 			continue
@@ -103,131 +209,206 @@ func (c *compiler) compilePlan(root db.Node) error {
 				return err
 			}
 		case "environment-binding":
-			// Environment bindings are informational; no code emitted in the script.
+			// Environment bindings are informational; variables arrive via __ENV.
 		case "scenario":
-			if err := c.emitScenario(child); err != nil {
-				return err
-			}
+			scenarios = append(scenarios, child)
 		default:
-			// Other children at the plan level: emit into default function.
-			if err := c.emitNode(child, 1); err != nil {
-				return err
-			}
+			loose = append(loose, child)
 		}
 	}
 
+	// In managed mode exactly one VU-based scenario is handed to the engine.
+	managedIdx := -1
+	if c.opts.Managed {
+		vuBased := 0
+		for i, s := range scenarios {
+			var p scenarioProps
+			if err := json.Unmarshal(s.Properties, &p); err != nil {
+				return fmt.Errorf("unmarshal scenario properties: %w", err)
+			}
+			if isVUBased(p.Executor) {
+				vuBased++
+				if managedIdx < 0 {
+					managedIdx = i
+				}
+			}
+		}
+		if vuBased > 1 {
+			managedIdx = -1 // k6 allows one externally-controlled scenario; keep native executors
+		}
+	}
+
+	// A plan without scenarios runs its nodes in one synthesized scenario.
+	if len(scenarios) == 0 {
+		if c.opts.Managed {
+			props, _ := json.Marshal(map[string]any{"executor": "constant-vus", "vus": 1, "duration": "30s"})
+			scenarios = append(scenarios, db.Node{ID: "default", Type: "scenario", Name: "default", Enabled: true, Properties: props, Children: loose})
+			managedIdx = 0
+			loose = nil
+		} else {
+			for _, n := range loose {
+				if err := c.emitNode(n, 1); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+
+	// The control scenario only makes sense when the engine owns the run's
+	// end time; otherwise it would keep a native-executor test alive.
+	c.control = c.opts.Managed && c.opts.KV && managedIdx >= 0
+
+	for i, s := range scenarios {
+		var children []db.Node
+		if i == 0 {
+			// Nodes outside any scenario run as part of the first scenario.
+			children = append(children, loose...)
+		}
+		children = append(children, s.Children...)
+		if err := c.emitScenario(s, children, i == managedIdx); err != nil {
+			return err
+		}
+	}
+
+	if c.control {
+		dur := c.result_.MaxDuration
+		c.scenarios = append(c.scenarios, &scenarioOut{
+			key: ControlScenario,
+			fn:  "__osControl",
+			options: []string{
+				"executor: 'constant-vus'",
+				"vus: 1",
+				fmt.Sprintf("duration: '%ds'", int(dur.Seconds())),
+				"gracefulStop: '0s'",
+				"exec: '__osControl'",
+			},
+		})
+		c.result_.Control = true
+		c.addImport("k6/http", "")
+		c.addImport("k6", "sleep")
+		c.needsExec = true
+	}
 	return nil
 }
 
-// emitScenario generates k6 options and populates the default function body.
-func (c *compiler) emitScenario(node db.Node) error {
-	var props struct {
-		Executor       string  `json:"executor"`
-		VUs            int     `json:"vus"`
-		MaxVUs         int     `json:"max_vus"`
-		Duration       string  `json:"duration"`
-		Iterations     int     `json:"iterations"`
-		Rate           int     `json:"rate"`
-		TimeUnit       string  `json:"time_unit"`
-		PreAllocVUs    int     `json:"pre_allocated_vus"`
-		GracefulStop   string  `json:"graceful_stop"`
-		Stages         []stage `json:"stages"`
-	}
+// emitScenario records a scenario's options and emits its body into its own
+// exec function.
+func (c *compiler) emitScenario(node db.Node, children []db.Node, managed bool) error {
+	var props scenarioProps
 	if err := json.Unmarshal(node.Properties, &props); err != nil {
 		return fmt.Errorf("unmarshal scenario properties: %w", err)
 	}
-
-	ob := c.options
-	ob.WriteString("export let options = {\n")
-	ob.WriteString("  scenarios: {\n")
-	ob.WriteString(fmt.Sprintf("    '%s': {\n", sanitizeScenarioName(node.Name)))
-	ob.WriteString(fmt.Sprintf("      executor: '%s',\n", props.Executor))
-
-	switch props.Executor {
-	case "externally-controlled":
-		c.extControlled = true
-		if props.VUs > 0 {
-			ob.WriteString(fmt.Sprintf("      vus: %d,\n", props.VUs))
-		}
-		if props.MaxVUs > 0 {
-			ob.WriteString(fmt.Sprintf("      maxVUs: %d,\n", props.MaxVUs))
-		}
-		if props.Duration != "" {
-			ob.WriteString(fmt.Sprintf("      duration: '%s',\n", props.Duration))
-		}
-	case "ramping-vus":
-		if props.Stages != nil {
-			ob.WriteString("      stages: [\n")
-			for _, s := range props.Stages {
-				ob.WriteString(fmt.Sprintf("        { duration: '%s', target: %d },\n", s.Duration, s.Target))
-			}
-			ob.WriteString("      ],\n")
-		}
-		if props.GracefulStop != "" {
-			ob.WriteString(fmt.Sprintf("      gracefulStop: '%s',\n", props.GracefulStop))
-		}
-	case "constant-vus":
-		if props.VUs > 0 {
-			ob.WriteString(fmt.Sprintf("      vus: %d,\n", props.VUs))
-		}
-		if props.Duration != "" {
-			ob.WriteString(fmt.Sprintf("      duration: '%s',\n", props.Duration))
-		}
-	case "constant-arrival-rate":
-		if props.Rate > 0 {
-			ob.WriteString(fmt.Sprintf("      rate: %d,\n", props.Rate))
-		}
-		if props.TimeUnit != "" {
-			ob.WriteString(fmt.Sprintf("      timeUnit: '%s',\n", props.TimeUnit))
-		}
-		if props.Duration != "" {
-			ob.WriteString(fmt.Sprintf("      duration: '%s',\n", props.Duration))
-		}
-		if props.PreAllocVUs > 0 {
-			ob.WriteString(fmt.Sprintf("      preAllocatedVUs: %d,\n", props.PreAllocVUs))
-		}
-		if props.MaxVUs > 0 {
-			ob.WriteString(fmt.Sprintf("      maxVUs: %d,\n", props.MaxVUs))
-		}
-	case "ramping-arrival-rate":
-		if props.Stages != nil {
-			ob.WriteString("      stages: [\n")
-			for _, s := range props.Stages {
-				ob.WriteString(fmt.Sprintf("        { duration: '%s', target: %d },\n", s.Duration, s.Target))
-			}
-			ob.WriteString("      ],\n")
-		}
-		if props.TimeUnit != "" {
-			ob.WriteString(fmt.Sprintf("      timeUnit: '%s',\n", props.TimeUnit))
-		}
-		if props.PreAllocVUs > 0 {
-			ob.WriteString(fmt.Sprintf("      preAllocatedVUs: %d,\n", props.PreAllocVUs))
-		}
-		if props.MaxVUs > 0 {
-			ob.WriteString(fmt.Sprintf("      maxVUs: %d,\n", props.MaxVUs))
-		}
-	case "shared-iterations":
-		if props.VUs > 0 {
-			ob.WriteString(fmt.Sprintf("      vus: %d,\n", props.VUs))
-		}
-		if props.Iterations > 0 {
-			ob.WriteString(fmt.Sprintf("      iterations: %d,\n", props.Iterations))
-		}
-	case "per-vu-iterations":
-		if props.VUs > 0 {
-			ob.WriteString(fmt.Sprintf("      vus: %d,\n", props.VUs))
-		}
-		if props.Iterations > 0 {
-			ob.WriteString(fmt.Sprintf("      iterations: %d,\n", props.Iterations))
-		}
+	if ov := c.opts.Overrides; ov != nil && c.opts.Managed && !managed {
+		applyNativeOverrides(&props, ov)
 	}
 
-	ob.WriteString("    },\n")
-	ob.WriteString("  },\n")
-	ob.WriteString("};\n")
+	key := sanitizeScenarioName(node.Name)
+	for _, s := range c.scenarios {
+		if s.key == key {
+			key = fmt.Sprintf("%s-%d", key, len(c.scenarios)+1)
+		}
+	}
+	out := &scenarioOut{key: key, fn: "scenario_" + strings.ReplaceAll(sanitizeVarName(key), "-", "_"), body: &strings.Builder{}}
+	opt := func(format string, a ...any) { out.options = append(out.options, fmt.Sprintf(format, a...)) }
 
-	// Emit scenario children into the default function.
-	for _, child := range node.Children {
+	if managed {
+		profile, err := profileFor(props, c.opts.Overrides)
+		if err != nil {
+			return err
+		}
+		planned := profile.Duration()
+		maxDur := MaxDurationFor(planned)
+		maxVUs := profile.Peak()
+		if props.MaxVUs > maxVUs {
+			maxVUs = props.MaxVUs
+		}
+		if maxVUs < 1 {
+			maxVUs = 1
+		}
+		c.result_.Profile = profile
+		c.result_.MaxVUs = maxVUs
+		c.result_.PlannedDuration = planned
+		c.result_.MaxDuration = maxDur
+		opt("executor: 'externally-controlled'")
+		opt("vus: %d", profile.StartVUs)
+		opt("maxVUs: %d", maxVUs)
+		opt("duration: '%ds'", int(math.Ceil(maxDur.Seconds())))
+	} else {
+		opt("executor: '%s'", props.Executor)
+		switch props.Executor {
+		case "externally-controlled":
+			if props.VUs > 0 {
+				opt("vus: %d", props.VUs)
+			}
+			if props.MaxVUs > 0 {
+				opt("maxVUs: %d", props.MaxVUs)
+			}
+			if props.Duration != "" {
+				opt("duration: '%s'", sanitizeJSString(props.Duration))
+			}
+		case "ramping-vus":
+			if props.StartVUs != nil {
+				opt("startVUs: %d", *props.StartVUs)
+			}
+			if props.Stages != nil {
+				opt("stages: [%s]", renderStages(props.Stages))
+			}
+			if props.GracefulStop != "" {
+				opt("gracefulStop: '%s'", sanitizeJSString(props.GracefulStop))
+			}
+		case "constant-vus":
+			if props.VUs > 0 {
+				opt("vus: %d", props.VUs)
+			}
+			if props.Duration != "" {
+				opt("duration: '%s'", sanitizeJSString(props.Duration))
+			}
+		case "constant-arrival-rate":
+			if props.Rate > 0 {
+				opt("rate: %d", props.Rate)
+			}
+			if props.TimeUnit != "" {
+				opt("timeUnit: '%s'", sanitizeJSString(props.TimeUnit))
+			}
+			if props.Duration != "" {
+				opt("duration: '%s'", sanitizeJSString(props.Duration))
+			}
+			if props.PreAllocVUs > 0 {
+				opt("preAllocatedVUs: %d", props.PreAllocVUs)
+			}
+			if props.MaxVUs > 0 {
+				opt("maxVUs: %d", props.MaxVUs)
+			}
+		case "ramping-arrival-rate":
+			if props.Stages != nil {
+				opt("stages: [%s]", renderStages(props.Stages))
+			}
+			if props.TimeUnit != "" {
+				opt("timeUnit: '%s'", sanitizeJSString(props.TimeUnit))
+			}
+			if props.PreAllocVUs > 0 {
+				opt("preAllocatedVUs: %d", props.PreAllocVUs)
+			}
+			if props.MaxVUs > 0 {
+				opt("maxVUs: %d", props.MaxVUs)
+			}
+		case "shared-iterations", "per-vu-iterations":
+			if props.VUs > 0 {
+				opt("vus: %d", props.VUs)
+			}
+			if props.Iterations > 0 {
+				opt("iterations: %d", props.Iterations)
+			}
+		}
+	}
+	opt("exec: '%s'", out.fn)
+	c.scenarios = append(c.scenarios, out)
+
+	prev := c.defaultFunc
+	c.defaultFunc = out.body
+	defer func() { c.defaultFunc = prev }()
+	for _, child := range children {
 		if !child.Enabled {
 			continue
 		}
@@ -235,8 +416,115 @@ func (c *compiler) emitScenario(node db.Node) error {
 			return err
 		}
 	}
-
 	return nil
+}
+
+// applyNativeOverrides maps Run-dialog parameters onto executors the engine
+// does not drive (arrival-rate and iteration-based).
+func applyNativeOverrides(p *scenarioProps, ov *db.RunParameters) {
+	switch p.Executor {
+	case "constant-arrival-rate":
+		if ov.RPSTarget > 0 {
+			p.Rate = ov.RPSTarget
+			p.TimeUnit = "1s"
+		}
+		if ov.DurationSeconds > 0 {
+			p.Duration = fmt.Sprintf("%ds", ov.DurationSeconds)
+		}
+		if ov.VUsTarget > 0 {
+			p.PreAllocVUs = ov.VUsTarget
+			if p.MaxVUs < ov.VUsTarget {
+				p.MaxVUs = ov.VUsTarget
+			}
+		}
+	case "ramping-arrival-rate":
+		if len(ov.Stages) > 0 {
+			p.Stages = nil
+			for _, s := range ov.Stages {
+				p.Stages = append(p.Stages, stage{Duration: s.Duration, Target: s.Target})
+			}
+		}
+		if ov.VUsTarget > 0 {
+			p.PreAllocVUs = ov.VUsTarget
+			if p.MaxVUs < ov.VUsTarget {
+				p.MaxVUs = ov.VUsTarget
+			}
+		}
+	case "shared-iterations", "per-vu-iterations":
+		if ov.VUsTarget > 0 {
+			p.VUs = ov.VUsTarget
+		}
+	}
+}
+
+// profileFor builds the engine-driven VU profile for a VU-based scenario,
+// applying the Run dialog's overrides when present.
+func profileFor(p scenarioProps, ov *db.RunParameters) (*Profile, error) {
+	if ov != nil && len(ov.Stages) > 0 {
+		prof := &Profile{}
+		for _, s := range ov.Stages {
+			d, err := ParseDuration(s.Duration)
+			if err != nil {
+				return nil, fmt.Errorf("stage duration: %w", err)
+			}
+			prof.Stages = append(prof.Stages, ProfileStage{Duration: d, Target: s.Target})
+		}
+		return prof, nil
+	}
+
+	var prof *Profile
+	switch p.Executor {
+	case "ramping-vus":
+		prof = &Profile{}
+		if p.StartVUs != nil {
+			prof.StartVUs = *p.StartVUs
+		}
+		for _, s := range p.Stages {
+			d, err := ParseDuration(s.Duration)
+			if err != nil {
+				return nil, fmt.Errorf("stage duration: %w", err)
+			}
+			prof.Stages = append(prof.Stages, ProfileStage{Duration: d, Target: s.Target})
+		}
+	default: // constant-vus, externally-controlled
+		vus := p.VUs
+		if vus <= 0 {
+			vus = 1
+		}
+		d := 30 * time.Second
+		if p.Duration != "" {
+			parsed, err := ParseDuration(p.Duration)
+			if err != nil {
+				return nil, fmt.Errorf("scenario duration: %w", err)
+			}
+			d = parsed
+		}
+		prof = &Profile{StartVUs: vus, Stages: []ProfileStage{{Duration: d, Target: vus}}}
+	}
+
+	if ov != nil && (ov.VUsTarget > 0 || ov.DurationSeconds > 0) {
+		vus := ov.VUsTarget
+		if vus <= 0 {
+			vus = prof.Peak()
+		}
+		d := prof.Duration()
+		if ov.DurationSeconds > 0 {
+			d = time.Duration(ov.DurationSeconds) * time.Second
+		}
+		prof = &Profile{StartVUs: vus, Stages: []ProfileStage{{Duration: d, Target: vus}}}
+	}
+	if prof.Duration() <= 0 {
+		return nil, fmt.Errorf("the scenario's load profile has no duration; set a duration or stages")
+	}
+	return prof, nil
+}
+
+func renderStages(stages []stage) string {
+	parts := make([]string, 0, len(stages))
+	for _, s := range stages {
+		parts = append(parts, fmt.Sprintf("{ duration: '%s', target: %d }", sanitizeJSString(s.Duration), s.Target))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // emitNode dispatches to the appropriate emit function based on node type.
@@ -278,6 +566,37 @@ func (c *compiler) emitNode(node db.Node, depth int) error {
 	}
 }
 
+// expectedStatuses returns non-2xx/3xx status codes that the request's own
+// assertions say are expected, so k6 doesn't count them as failed requests.
+func expectedStatuses(children []db.Node) []int {
+	var out []int
+	for _, ch := range children {
+		if !ch.Enabled || ch.Type != "assertion" {
+			continue
+		}
+		var a struct {
+			Target    string  `json:"target"`
+			Condition string  `json:"condition"`
+			Value     any     `json:"value"`
+			Negate    bool    `json:"negate"`
+		}
+		if json.Unmarshal(ch.Properties, &a) != nil || a.Target != "status" || a.Condition != "equals" || a.Negate {
+			continue
+		}
+		var code int
+		switch v := a.Value.(type) {
+		case float64:
+			code = int(v)
+		case string:
+			fmt.Sscanf(v, "%d", &code)
+		}
+		if code >= 400 && code <= 599 {
+			out = append(out, code)
+		}
+	}
+	return out
+}
+
 // emitHTTP generates an http.get/post/put/patch/delete/head/options call.
 func (c *compiler) emitHTTP(node db.Node, depth int) error {
 	var props struct {
@@ -296,23 +615,29 @@ func (c *compiler) emitHTTP(node db.Node, depth int) error {
 
 	ind := indent(depth)
 	df := c.defaultFunc
+	id := sanitizeVarName(node.ID)
 
 	// Comment with node name.
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
 
-	// Build params object if we have headers, timeout, or redirects config.
-	hasParams := len(props.Headers) > 0 || props.Timeout != "" || props.FollowRedirects != nil
+	expected := expectedStatuses(node.Children)
+
+	// Build params object if we have headers, timeout, redirects config, or expected statuses.
+	hasParams := len(props.Headers) > 0 || props.Timeout != "" || props.FollowRedirects != nil || len(expected) > 0
 	if hasParams {
-		df.WriteString(fmt.Sprintf("%slet params_%s = {\n", ind, sanitizeVarName(node.ID)))
+		df.WriteString(fmt.Sprintf("%slet params_%s = {\n", ind, id))
 		if len(props.Headers) > 0 {
 			df.WriteString(fmt.Sprintf("%s  headers: {\n", ind))
 			for _, h := range props.Headers {
-				df.WriteString(fmt.Sprintf("%s    '%s': '%s',\n", ind, sanitizeJSString(h.Key), sanitizeJSString(h.Value)))
+				if strings.TrimSpace(h.Key) == "" {
+					continue
+				}
+				df.WriteString(fmt.Sprintf("%s    '%s': %s,\n", ind, sanitizeJSString(h.Key), c.resolveVarRefs(h.Value)))
 			}
 			df.WriteString(fmt.Sprintf("%s  },\n", ind))
 		}
 		if props.Timeout != "" {
-			df.WriteString(fmt.Sprintf("%s  timeout: '%s',\n", ind, props.Timeout))
+			df.WriteString(fmt.Sprintf("%s  timeout: '%s',\n", ind, sanitizeJSString(props.Timeout)))
 		}
 		if props.FollowRedirects != nil {
 			if *props.FollowRedirects {
@@ -321,35 +646,49 @@ func (c *compiler) emitHTTP(node db.Node, depth int) error {
 				df.WriteString(fmt.Sprintf("%s  redirects: 0,\n", ind))
 			}
 		}
+		if len(expected) > 0 {
+			codes := make([]string, len(expected))
+			for i, code := range expected {
+				codes[i] = fmt.Sprint(code)
+			}
+			df.WriteString(fmt.Sprintf("%s  responseCallback: http.expectedStatuses({ min: 200, max: 399 }, %s),\n", ind, strings.Join(codes, ", ")))
+		}
 		df.WriteString(fmt.Sprintf("%s};\n", ind))
 	}
 
-	// Resolve the URL: replace ${VAR} with template literals.
-	url := resolveVarRefs(props.URL)
+	url := c.resolveVarRefs(props.URL)
 	method := strings.ToLower(props.Method)
+	if method == "" {
+		method = "get"
+	}
 
-	// Build the call.
+	if c.control {
+		df.WriteString(fmt.Sprintf("%s__osPace();\n", ind))
+	}
+
+	paramsArg := ""
+	if hasParams {
+		paramsArg = ", params_" + id
+	}
 	switch method {
-	case "get", "head", "options", "delete":
+	case "get", "head", "options":
+		df.WriteString(fmt.Sprintf("%slet res_%s = http.%s(%s%s);\n", ind, id, method, url, paramsArg))
+	case "delete":
+		// http.del takes (url, body, params).
 		if hasParams {
-			df.WriteString(fmt.Sprintf("%slet res_%s = http.%s(%s, params_%s);\n",
-				ind, sanitizeVarName(node.ID), method, url, sanitizeVarName(node.ID)))
+			df.WriteString(fmt.Sprintf("%slet res_%s = http.del(%s, null%s);\n", ind, id, url, paramsArg))
 		} else {
-			df.WriteString(fmt.Sprintf("%slet res_%s = http.%s(%s);\n",
-				ind, sanitizeVarName(node.ID), method, url))
+			df.WriteString(fmt.Sprintf("%slet res_%s = http.del(%s);\n", ind, id, url))
 		}
 	case "post", "put", "patch":
 		bodyStr := c.resolveHTTPBody(props.Body)
-		if hasParams {
-			df.WriteString(fmt.Sprintf("%slet res_%s = http.%s(%s, %s, params_%s);\n",
-				ind, sanitizeVarName(node.ID), method, url, bodyStr, sanitizeVarName(node.ID)))
-		} else {
-			df.WriteString(fmt.Sprintf("%slet res_%s = http.%s(%s, %s);\n",
-				ind, sanitizeVarName(node.ID), method, url, bodyStr))
-		}
+		df.WriteString(fmt.Sprintf("%slet res_%s = http.%s(%s, %s%s);\n", ind, id, method, url, bodyStr, paramsArg))
 	default:
 		return fmt.Errorf("unsupported HTTP method %q", props.Method)
 	}
+	// `res` always refers to the most recent response, for If conditions,
+	// code blocks, and assertions placed on controllers.
+	df.WriteString(fmt.Sprintf("%sres = res_%s;\n", ind, id))
 
 	// Emit children (assertions, timers) that reference the response.
 	for _, child := range node.Children {
@@ -357,7 +696,7 @@ func (c *compiler) emitHTTP(node db.Node, depth int) error {
 			continue
 		}
 		if child.Type == "assertion" {
-			if err := c.emitAssertionForResponse(child, depth, "res_"+sanitizeVarName(node.ID)); err != nil {
+			if err := c.emitAssertionForResponse(child, depth, "res_"+id); err != nil {
 				return err
 			}
 		} else {
@@ -389,13 +728,13 @@ func (c *compiler) emitWebSocket(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
 
-	url := resolveVarRefs(props.URL)
+	url := c.resolveVarRefs(props.URL)
 
 	paramsStr := "null"
 	if props.ConnectTimeout != "" {
-		paramsStr = fmt.Sprintf("{ timeout: '%s' }", props.ConnectTimeout)
+		paramsStr = fmt.Sprintf("{ timeout: '%s' }", sanitizeJSString(props.ConnectTimeout))
 	}
 
 	df.WriteString(fmt.Sprintf("%slet res_%s = ws.connect(%s, %s, function (socket) {\n",
@@ -407,7 +746,7 @@ func (c *compiler) emitWebSocket(node db.Node, depth int) error {
 	if len(props.Messages) > 0 {
 		df.WriteString(fmt.Sprintf("%ssocket.on('open', function () {\n", innerInd))
 		for _, msg := range props.Messages {
-			df.WriteString(fmt.Sprintf("%s  socket.send('%s');\n", innerInd, sanitizeJSString(msg.Data)))
+			df.WriteString(fmt.Sprintf("%s  socket.send(%s);\n", innerInd, c.resolveVarRefs(msg.Data)))
 		}
 		df.WriteString(fmt.Sprintf("%s});\n", innerInd))
 	}
@@ -441,7 +780,7 @@ func (c *compiler) emitWebSocket(node db.Node, depth int) error {
 	}
 
 	// Set a timeout to close the socket.
-	if props.ExpectedMessages != nil && len(props.ExpectedMessages) > 0 {
+	if len(props.ExpectedMessages) > 0 {
 		df.WriteString(fmt.Sprintf("%ssocket.setTimeout(function () {\n", innerInd))
 		df.WriteString(fmt.Sprintf("%s  socket.close();\n", innerInd))
 		df.WriteString(fmt.Sprintf("%s}, 30000);\n", innerInd))
@@ -466,7 +805,10 @@ func (c *compiler) emitCodeBlock(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
+	if strings.Contains(props.Code, "__vars") || strings.Contains(props.Code, "__v(") {
+		c.needsVars = true
+	}
 	// Emit each line of the code block with proper indentation.
 	lines := strings.Split(props.Code, "\n")
 	for _, line := range lines {
@@ -484,12 +826,16 @@ func (c *compiler) emitIfController(node db.Node, depth int) error {
 	if err := json.Unmarshal(node.Properties, &props); err != nil {
 		return fmt.Errorf("unmarshal if-controller properties: %w", err)
 	}
+	cond := strings.TrimSpace(props.Condition)
+	if cond == "" {
+		cond = "true"
+	}
 
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
-	df.WriteString(fmt.Sprintf("%sif (%s) {\n", ind, props.Condition))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
+	df.WriteString(fmt.Sprintf("%sif (%s) {\n", ind, cond))
 
 	for _, child := range node.Children {
 		if err := c.emitNode(child, depth+1); err != nil {
@@ -499,6 +845,7 @@ func (c *compiler) emitIfController(node db.Node, depth int) error {
 
 	df.WriteString(fmt.Sprintf("%s}", ind))
 	// Do not add newline here -- else-controller may follow.
+	df.WriteString("\n")
 
 	return nil
 }
@@ -508,8 +855,13 @@ func (c *compiler) emitElseController(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf(" else {\n"))
-	_ = ind // indentation is handled by the parent if-controller's closing brace
+	// Re-open the preceding if block: drop its trailing newline.
+	s := df.String()
+	if strings.HasSuffix(s, "}\n") {
+		df.Reset()
+		df.WriteString(strings.TrimSuffix(s, "\n"))
+	}
+	df.WriteString(" else {\n")
 
 	for _, child := range node.Children {
 		if err := c.emitNode(child, depth+1); err != nil {
@@ -535,7 +887,7 @@ func (c *compiler) emitLoopController(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
 
 	if props.WhileCondition != "" {
 		df.WriteString(fmt.Sprintf("%swhile (%s) {\n", ind, props.WhileCondition))
@@ -561,7 +913,7 @@ func (c *compiler) emitTransactionController(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
 	df.WriteString(fmt.Sprintf("%sgroup('%s', function () {\n", ind, sanitizeJSString(node.Name)))
 
 	for _, child := range node.Children {
@@ -580,7 +932,7 @@ func (c *compiler) emitOnceOnlyController(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
 	df.WriteString(fmt.Sprintf("%sif (__ITER === 0) {\n", ind))
 
 	for _, child := range node.Children {
@@ -606,7 +958,7 @@ func (c *compiler) emitRandomController(node db.Node, depth int) error {
 	ind := indent(depth)
 	df := c.defaultFunc
 
-	df.WriteString(fmt.Sprintf("%s// %s\n", ind, node.Name))
+	df.WriteString(fmt.Sprintf("%s// %s\n", ind, sanitizeComment(node.Name)))
 
 	enabledChildren := make([]db.Node, 0, len(node.Children))
 	for _, child := range node.Children {
@@ -670,7 +1022,7 @@ func (c *compiler) emitRandomController(node db.Node, depth int) error {
 	return nil
 }
 
-// emitAssertion generates a check() call (standalone, not tied to a response variable).
+// emitAssertion generates a check() against the most recent response (`res`).
 func (c *compiler) emitAssertion(node db.Node, depth int) error {
 	return c.emitAssertionForResponse(node, depth, "res")
 }
@@ -696,6 +1048,15 @@ func (c *compiler) emitAssertionForResponse(node db.Node, depth int, resVar stri
 	checkName := sanitizeJSString(node.Name)
 	expr := buildCheckExpression(props.Target, props.Condition, props.Value, props.Negate, props.HeaderName)
 
+	if resVar == "res" {
+		// A standalone assertion with no preceding request in this function.
+		df.WriteString(fmt.Sprintf("%sif (res) {\n", ind))
+		df.WriteString(fmt.Sprintf("%s  check(res, {\n", ind))
+		df.WriteString(fmt.Sprintf("%s    '%s': (r) => %s,\n", ind, checkName, expr))
+		df.WriteString(fmt.Sprintf("%s  });\n", ind))
+		df.WriteString(fmt.Sprintf("%s}\n", ind))
+		return nil
+	}
 	df.WriteString(fmt.Sprintf("%scheck(%s, {\n", ind, resVar))
 	df.WriteString(fmt.Sprintf("%s  '%s': (r) => %s,\n", ind, checkName, expr))
 	df.WriteString(fmt.Sprintf("%s});\n", ind))
@@ -710,7 +1071,7 @@ func buildCheckExpression(target, condition string, value interface{}, negate bo
 	case "status":
 		accessor = "r.status"
 	case "body":
-		accessor = "r.body"
+		accessor = "String(r.body)"
 	case "header":
 		accessor = fmt.Sprintf("r.headers['%s']", sanitizeJSString(headerName))
 	case "response_time":
@@ -719,32 +1080,51 @@ func buildCheckExpression(target, condition string, value interface{}, negate bo
 		accessor = "r.status"
 	}
 
+	numeric := func(v interface{}) string {
+		switch n := v.(type) {
+		case float64:
+			return fmt.Sprintf("%v", n)
+		case string:
+			var f float64
+			if _, err := fmt.Sscanf(n, "%g", &f); err == nil {
+				return fmt.Sprintf("%v", f)
+			}
+		}
+		return "0"
+	}
+
 	var expr string
 	switch condition {
 	case "equals":
 		switch v := value.(type) {
 		case float64:
-			expr = fmt.Sprintf("%s === %d", accessor, int(v))
+			expr = fmt.Sprintf("%s === %s", accessor, numeric(v))
 		case string:
-			expr = fmt.Sprintf("%s === '%s'", accessor, sanitizeJSString(v))
-		default:
+			if target == "status" {
+				expr = fmt.Sprintf("%s === %s", accessor, numeric(v))
+			} else {
+				expr = fmt.Sprintf("%s === '%s'", accessor, sanitizeJSString(v))
+			}
+		case bool:
 			expr = fmt.Sprintf("%s === %v", accessor, v)
+		default:
+			expr = fmt.Sprintf("%s === '%s'", accessor, sanitizeJSString(fmt.Sprintf("%v", v)))
 		}
 	case "contains":
-		expr = fmt.Sprintf("%s.includes('%s')", accessor, sanitizeJSString(fmt.Sprintf("%v", value)))
+		expr = fmt.Sprintf("String(%s).includes('%s')", accessor, sanitizeJSString(fmt.Sprintf("%v", value)))
 	case "matches":
 		expr = fmt.Sprintf("new RegExp('%s').test(%s)", sanitizeJSString(fmt.Sprintf("%v", value)), accessor)
 	case "jsonpath":
 		// For jsonpath, check that the path exists in the parsed JSON.
-		expr = fmt.Sprintf("JSON.parse(%s)%s !== undefined", accessor, jsonPathToJS(fmt.Sprintf("%v", value)))
+		expr = fmt.Sprintf("(() => { try { return JSON.parse(r.body)%s !== undefined; } catch (e) { return false; } })()", jsonPathToJS(fmt.Sprintf("%v", value)))
 	case "less_than":
-		expr = fmt.Sprintf("%s < %v", accessor, value)
+		expr = fmt.Sprintf("%s < %s", accessor, numeric(value))
 	case "greater_than":
-		expr = fmt.Sprintf("%s > %v", accessor, value)
+		expr = fmt.Sprintf("%s > %s", accessor, numeric(value))
 	case "exists":
 		expr = fmt.Sprintf("%s !== undefined && %s !== null", accessor, accessor)
 	default:
-		expr = fmt.Sprintf("%s === %v", accessor, value)
+		expr = fmt.Sprintf("%s === '%s'", accessor, sanitizeJSString(fmt.Sprintf("%v", value)))
 	}
 
 	if negate {
@@ -785,7 +1165,7 @@ func (c *compiler) emitTimer(node db.Node, depth int) error {
 		meanSec := float64(props.MeanMs) / 1000.0
 		devSec := float64(props.DeviationMs) / 1000.0
 		// Box-Muller transform for Gaussian random.
-		df.WriteString(fmt.Sprintf("%ssleep(Math.max(0, %.3f + %.3f * Math.sqrt(-2 * Math.log(Math.random())) * Math.cos(2 * Math.PI * Math.random())));\n",
+		df.WriteString(fmt.Sprintf("%ssleep(Math.max(0, %.3f + %.3f * Math.sqrt(-2 * Math.log(Math.random() || 1e-9)) * Math.cos(2 * Math.PI * Math.random())));\n",
 			ind, meanSec, devSec))
 	default:
 		seconds := float64(props.DurationMs) / 1000.0
@@ -815,6 +1195,8 @@ func (c *compiler) emitDataSource(node db.Node) error {
 	varName := props.VariableName
 	if varName == "" {
 		varName = sanitizeVarName(node.ID)
+	} else {
+		varName = sanitizeVarName(varName)
 	}
 
 	switch props.SourceType {
@@ -838,41 +1220,40 @@ func (c *compiler) emitDataSource(node db.Node) error {
 	return nil
 }
 
+func (c *compiler) result() *Result {
+	r := c.result_
+	r.Script = c.render()
+	return &r
+}
+
 // render assembles the final k6 script from all collected parts.
 func (c *compiler) render() string {
 	var sb strings.Builder
 
 	// Imports.
-	// Always import http if used (default import style).
 	if _, ok := c.imports["k6/http"]; ok {
 		sb.WriteString("import http from 'k6/http';\n")
 		delete(c.imports, "k6/http")
 	}
-
-	// WebSocket import.
 	if c.needsWS {
 		sb.WriteString("import ws from 'k6/ws';\n")
 		delete(c.imports, "k6/ws")
 	}
-
-	// k6 named imports.
 	if names, ok := c.imports["k6"]; ok && len(names) > 0 {
-		sb.WriteString(fmt.Sprintf("import { %s } from 'k6';\n", strings.Join(dedup(names), ", ")))
+		sorted := append([]string(nil), dedup(names)...)
+		sort.Strings(sorted)
+		sb.WriteString(fmt.Sprintf("import { %s } from 'k6';\n", strings.Join(sorted, ", ")))
 		delete(c.imports, "k6")
 	}
-
-	// SharedArray import.
 	if c.needsShared {
 		sb.WriteString("import { SharedArray } from 'k6/data';\n")
 	}
-
-	// exec import for externally-controlled.
-	if c.extControlled {
+	if c.needsExec || c.hasExternallyControlled() {
 		sb.WriteString("import exec from 'k6/execution';\n")
-		c.needsExec = true
 	}
-
-	// Any remaining module imports (sorted for determinism).
+	if c.control {
+		sb.WriteString("import { openKv } from 'k6/x/kv';\n")
+	}
 	remainingMods := make([]string, 0, len(c.imports))
 	for mod := range c.imports {
 		if len(c.imports[mod]) > 0 {
@@ -883,58 +1264,140 @@ func (c *compiler) render() string {
 	for _, mod := range remainingMods {
 		sb.WriteString(fmt.Sprintf("import { %s } from '%s';\n", strings.Join(dedup(c.imports[mod]), ", "), mod))
 	}
-
 	sb.WriteString("\n")
 
-	// Data sources (SharedArray declarations).
 	if c.dataSources.Len() > 0 {
 		sb.WriteString(c.dataSources.String())
 	}
 
-	// Options.
-	if c.options.Len() > 0 {
-		sb.WriteString(c.options.String())
+	if len(c.scenarios) > 0 {
+		sb.WriteString("export const options = {\n")
+		sb.WriteString("  scenarios: {\n")
+		for _, s := range c.scenarios {
+			sb.WriteString(fmt.Sprintf("    '%s': {\n", s.key))
+			for _, o := range s.options {
+				sb.WriteString("      " + o + ",\n")
+			}
+			sb.WriteString("    },\n")
+		}
+		sb.WriteString("  },\n")
+		sb.WriteString("};\n\n")
+	}
+
+	if c.needsVars {
+		sb.WriteString(varsHelper)
+		sb.WriteString("\n")
+	}
+	if c.control {
+		sb.WriteString(controlHelper)
 		sb.WriteString("\n")
 	}
 
-	// Token bucket helper and should-stop watchdog for externally-controlled.
-	if c.extControlled {
-		sb.WriteString(tokenBucketHelper)
-		sb.WriteString("\n")
+	writeFunc := func(name string, body string) {
+		prefix := "export function " + name + " () {\n"
+		if name == "default" {
+			prefix = "export default function () {\n"
+		}
+		if c.control {
+			prefix = strings.Replace(prefix, "function", "async function", 1)
+		}
+		sb.WriteString(prefix)
+		if c.control {
+			sb.WriteString("  if (!(await __osSync())) return;\n")
+		}
+		sb.WriteString("  let res = null;\n")
+		sb.WriteString(body)
+		sb.WriteString("}\n")
 	}
 
-	// Default function.
-	sb.WriteString("export default function () {\n")
-	if c.extControlled {
-		sb.WriteString("  // should-stop watchdog\n")
-		sb.WriteString("  if (shouldStop()) {\n")
-		sb.WriteString("    exec.test.abort('stop flag set');\n")
-		sb.WriteString("  }\n\n")
-		sb.WriteString("  // RPS token bucket\n")
-		sb.WriteString("  acquireToken();\n\n")
+	wrote := false
+	for _, s := range c.scenarios {
+		if s.body == nil {
+			continue // internal scenario with its own helper function
+		}
+		if wrote {
+			sb.WriteString("\n")
+		}
+		writeFunc(s.fn, s.body.String())
+		wrote = true
 	}
-	sb.WriteString(c.defaultFunc.String())
-	sb.WriteString("}\n")
+	if !wrote || c.mainFunc.Len() > 0 {
+		if wrote {
+			sb.WriteString("\n")
+		}
+		writeFunc("default", c.mainFunc.String())
+	}
 
 	return sb.String()
 }
 
-// tokenBucketHelper is the xk6-kv token bucket and should-stop watchdog
-// prepended to every externally-controlled script, per docs/02-architecture.md section 3.
-const tokenBucketHelper = `// --- xk6-kv token bucket for RPS control ---
-// The control plane updates the 'rps_target' key; VUs read it to throttle.
-let __rpsTarget = __ENV.RPS_TARGET ? parseInt(__ENV.RPS_TARGET) : 0;
-
-function acquireToken() {
-  if (__rpsTarget <= 0) return;
-  let interval = 1000.0 / __rpsTarget;
-  sleep(interval / 1000.0);
+func (c *compiler) hasExternallyControlled() bool {
+	for _, s := range c.scenarios {
+		for _, o := range s.options {
+			if o == "executor: 'externally-controlled'" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
-// --- should-stop watchdog ---
-// The control plane sets 'should_stop' to signal graceful shutdown.
-function shouldStop() {
-  return __ENV.SHOULD_STOP === 'true';
+// varsHelper resolves ${NAME} references: values set by code blocks
+// (`__vars.NAME = ...`) win, then environment variables, then empty string.
+const varsHelper = `// Variables: code blocks may set __vars.NAME; environments arrive as __ENV.
+const __vars = {};
+function __v(name) {
+  if (__vars[name] !== undefined) return __vars[name];
+  if (__ENV[name] !== undefined) return __ENV[name];
+  return '';
+}
+`
+
+// controlHelper is the live-control glue for managed runs. The control
+// scenario polls the control plane once a second and publishes the RPS
+// target and stop flag to an xk6-kv store; every iteration reads them, and
+// __osPace() spaces this VU's requests so all VUs together stay at or under
+// the target. See docs/decisions/0010-run-metrics-and-live-control.md.
+const controlHelper = `// --- OpenSynapse live control (xk6-kv) ---
+const __osKv = openKv({ backend: 'memory' });
+let __osRps = Number(__ENV.OPENSYNAPSE_RPS_TARGET || 0);
+let __osNext = 0;
+
+export async function __osControl() {
+  const s = http.get(__ENV.OPENSYNAPSE_CONTROL_URL, {
+    headers: { 'X-OpenSynapse-Run-Token': __ENV.OPENSYNAPSE_CONTROL_TOKEN },
+    tags: { name: 'opensynapse-control' },
+  });
+  if (s.status === 200) {
+    const state = s.json();
+    await __osKv.set('rps_target', Number(state.rps_target) || 0);
+    await __osKv.set('should_stop', !!state.should_stop);
+    await __osKv.set('paused', !!state.paused);
+  }
+  sleep(1);
+}
+
+// Reads live-control state at the start of each iteration. Returns false
+// while the run is paused or being stopped, so no new requests start.
+async function __osSync() {
+  try { __osRps = Number(await __osKv.get('rps_target')) || 0; } catch (e) { /* not published yet */ }
+  let hold = false;
+  try { hold = !!(await __osKv.get('should_stop')) || !!(await __osKv.get('paused')); } catch (e) { /* not published yet */ }
+  if (hold) {
+    sleep(0.5);
+    return false;
+  }
+  return true;
+}
+
+// Spaces this VU's requests so all VUs together stay at or under the RPS target.
+function __osPace() {
+  if (!(__osRps > 0)) return;
+  const vus = Math.max(1, exec.instance.vusActive - 1);
+  const interval = (vus * 1000) / __osRps;
+  const now = Date.now();
+  if (__osNext > now) sleep((__osNext - now) / 1000);
+  __osNext = Math.max(__osNext, now) + interval;
 }
 `
 
@@ -973,13 +1436,57 @@ type wsExpectedMessage struct {
 	Timeout   string `json:"timeout"`
 }
 
+// --- Durations ---
+
+// ParseDuration parses k6 duration strings ("30s", "2m", "1h30m", bare
+// seconds "45").
+func ParseDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty duration")
+	}
+	var f float64
+	if _, err := fmt.Sscanf(s, "%g", &f); err == nil && fmt.Sprint(f) == s {
+		return time.Duration(f * float64(time.Second)), nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration %q", s)
+	}
+	return d, nil
+}
+
+// MaxDurationFor returns the hard upper bound a managed run is started with:
+// the planned duration plus a 50% buffer (at least five minutes, at most an
+// extra 24 hours). Live "extend" requests cannot go past it.
+func MaxDurationFor(planned time.Duration) time.Duration {
+	buffer := planned / 2
+	if buffer < 5*time.Minute {
+		buffer = 5 * time.Minute
+	}
+	if buffer > 24*time.Hour {
+		buffer = 24 * time.Hour
+	}
+	return planned + buffer
+}
+
 // --- String helpers ---
 
-// sanitizeJSString escapes single quotes and backslashes for JS string literals.
+// sanitizeJSString escapes a value for a single-quoted JS string literal.
 func sanitizeJSString(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "'", "\\'")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, " ", "\\u2028")
+	s = strings.ReplaceAll(s, " ", "\\u2029")
 	return s
+}
+
+// sanitizeComment keeps node names from breaking out of a // comment.
+func sanitizeComment(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	return strings.ReplaceAll(s, "\n", " ")
 }
 
 // sanitizeVarName converts a node ID to a valid JS variable name fragment.
@@ -1030,8 +1537,6 @@ func sanitizeScenarioName(s string) string {
 		switch {
 		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
 			b.WriteRune(r)
-		case r == ' ':
-			b.WriteByte('-')
 		default:
 			b.WriteByte('-')
 		}
@@ -1039,32 +1544,64 @@ func sanitizeScenarioName(s string) string {
 	return b.String()
 }
 
-// resolveVarRefs replaces ${VAR} references with JS template literal syntax.
-// Input: "${BASE_URL}/api/login" -> Output: `${BASE_URL}/api/login`
-func resolveVarRefs(s string) string {
-	if strings.Contains(s, "${") {
-		return "`" + s + "`"
+var varRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// k6Globals are referenced directly rather than through __v().
+var k6Globals = map[string]bool{"__VU": true, "__ITER": true}
+
+// resolveVarRefs turns a value containing ${NAME} references into a JS
+// template literal that resolves them at runtime through __v(). Values
+// without references become plain single-quoted strings.
+// Input: "${BASE_URL}/api/login" -> Output: `${__v('BASE_URL')}/api/login`
+func (c *compiler) resolveVarRefs(s string) string {
+	locs := varRefRe.FindAllStringSubmatchIndex(s, -1)
+	if len(locs) == 0 {
+		return "'" + sanitizeJSString(s) + "'"
 	}
-	return "'" + sanitizeJSString(s) + "'"
+	var b strings.Builder
+	b.WriteByte('`')
+	last := 0
+	for _, m := range locs {
+		b.WriteString(escapeTemplate(s[last:m[0]]))
+		name := s[m[2]:m[3]]
+		if k6Globals[name] {
+			b.WriteString("${" + name + "}")
+		} else {
+			c.needsVars = true
+			b.WriteString("${__v('" + name + "')}")
+		}
+		last = m[1]
+	}
+	b.WriteString(escapeTemplate(s[last:]))
+	b.WriteByte('`')
+	return b.String()
+}
+
+// escapeTemplate escapes literal text for a JS template literal.
+func escapeTemplate(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "`", "\\`")
+	return strings.ReplaceAll(s, "${", "\\${")
 }
 
 // resolveHTTPBody returns the JS expression for the request body.
 func (c *compiler) resolveHTTPBody(body httpBody) string {
 	switch body.Type {
-	case "none":
+	case "none", "":
 		return "null"
 	case "json", "raw":
-		if strings.Contains(body.Content, "${") {
-			return "`" + body.Content + "`"
-		}
-		return "'" + sanitizeJSString(body.Content) + "'"
+		return c.resolveVarRefs(body.Content)
 	case "form":
 		if len(body.FormFields) == 0 {
+			if body.Content != "" {
+				// urlencoded form supplied as raw text
+				return c.resolveVarRefs(body.Content)
+			}
 			return "{}"
 		}
 		var parts []string
 		for _, f := range body.FormFields {
-			parts = append(parts, fmt.Sprintf("'%s': '%s'", sanitizeJSString(f.Key), sanitizeJSString(f.Value)))
+			parts = append(parts, fmt.Sprintf("'%s': %s", sanitizeJSString(f.Key), c.resolveVarRefs(f.Value)))
 		}
 		return "{ " + strings.Join(parts, ", ") + " }"
 	default:

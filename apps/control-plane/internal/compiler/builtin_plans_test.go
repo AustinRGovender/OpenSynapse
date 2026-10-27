@@ -43,10 +43,10 @@ func TestAllBuiltInPlansCompile(t *testing.T) {
 			if !strings.Contains(script, "import http from 'k6/http'") {
 				t.Errorf("%q: missing http import", plan.Name)
 			}
-			if !strings.Contains(script, "export default function") {
-				t.Errorf("%q: missing default function", plan.Name)
+			if !strings.Contains(script, "export function scenario_") {
+				t.Errorf("%q: missing scenario exec function", plan.Name)
 			}
-			if !strings.Contains(script, "export let options") {
+			if !strings.Contains(script, "export const options") {
 				t.Errorf("%q: missing options export", plan.Name)
 			}
 		})
@@ -88,9 +88,9 @@ func TestBuiltInPlanSmokeCompileContent(t *testing.T) {
 		"vus: 1",
 		"duration: '30s'",
 		"'Echo-Smoke'",
-		"http.get('http://echo-api:9001/health')",
-		"http.post('http://echo-api:9001/echo'",
-		"http.get('http://echo-api:9001/delay/100')",
+		"http.get(`${__v('ECHO_API')}/health`)",
+		"http.post(`${__v('ECHO_API')}/echo`",
+		"http.get(`${__v('ECHO_API')}/delay/100`)",
 		"group('Echo Flow'",
 		"check(",
 		"r.status === 200",
@@ -142,8 +142,8 @@ func TestBuiltInPlanRampingCompileContent(t *testing.T) {
 		"target: 30",
 		"target: 50",
 		"target: 0",
-		"http.get('http://mock-ecommerce:9002/products')",
-		"http.post('http://mock-ecommerce:9002/orders'",
+		"http.get(`${__v('ECOMMERCE_API')}/products`)",
+		"http.post(`${__v('ECOMMERCE_API')}/orders`",
 		"check(",
 		"r.status === 200",
 		"r.status === 201",
@@ -187,10 +187,10 @@ func TestBuiltInPlanSpikeCrossAPI(t *testing.T) {
 
 	// Verify all 4 APIs are referenced
 	apis := []string{
-		"echo-api:9001",
-		"mock-ecommerce:9002",
-		"slow-api:9003",
-		"error-api:9004",
+		"__v('ECHO_API')",
+		"__v('ECOMMERCE_API')",
+		"__v('SLOW_API')",
+		"__v('ERROR_API')",
 	}
 	for _, api := range apis {
 		if !strings.Contains(script, api) {

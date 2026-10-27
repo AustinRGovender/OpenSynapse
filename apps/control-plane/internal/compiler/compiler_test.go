@@ -85,17 +85,14 @@ func TestCompileFixturePlan(t *testing.T) {
 		t.Error("script should contain duration: '10m'")
 	}
 
-	// Verify export default function.
-	if !strings.Contains(script, "export default function ()") {
-		t.Error("script should contain export default function")
+	// Each scenario runs its own exec function.
+	if !strings.Contains(script, "export function scenario_") || !strings.Contains(script, "exec: 'scenario_") {
+		t.Error("script should contain a named scenario exec function")
 	}
 
-	// Verify token bucket helper (for externally-controlled).
-	if !strings.Contains(script, "acquireToken") {
-		t.Error("script should contain acquireToken for externally-controlled executor")
-	}
-	if !strings.Contains(script, "shouldStop") {
-		t.Error("script should contain shouldStop watchdog")
+	// Standalone scripts must not depend on OpenSynapse's live-control glue.
+	if strings.Contains(script, "k6/x/kv") || strings.Contains(script, "__osPace") {
+		t.Error("standalone script should not include live-control helpers")
 	}
 
 	// Verify HTTP requests.
@@ -289,9 +286,12 @@ func TestEmitHTTPWithVarRefs(t *testing.T) {
 		t.Fatalf("CompileNode() error: %v", err)
 	}
 
-	// Variable references should produce template literals.
-	if !strings.Contains(script, "`${BASE_URL}/api/items`") {
-		t.Error("expected template literal for variable references")
+	// Variable references should produce template literals resolved at runtime.
+	if !strings.Contains(script, "`${__v('BASE_URL')}/api/items`") {
+		t.Errorf("expected template literal for variable references, got:\n%s", script)
+	}
+	if !strings.Contains(script, "function __v(name)") {
+		t.Error("expected the __v() variable helper to be emitted")
 	}
 }
 
