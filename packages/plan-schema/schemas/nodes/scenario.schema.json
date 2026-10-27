@@ -69,7 +69,10 @@
             "description": "Target VU count or rate at the end of this stage."
           }
         },
-        "required": ["duration", "target"],
+        "required": [
+          "duration",
+          "target"
+        ],
         "additionalProperties": false
       },
       "description": "Stages for ramping executors (ramping-vus, ramping-arrival-rate)."
@@ -123,8 +126,20 @@
         "type": "object"
       },
       "description": "Child nodes (samplers, controllers, timers, assertions, data sources)."
+    },
+    "start_vus": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "VUs at the start of a ramping-vus profile (default 0)."
     }
   },
-  "required": ["id", "type", "name", "enabled", "executor", "children"],
+  "required": [
+    "id",
+    "type",
+    "name",
+    "enabled",
+    "executor",
+    "children"
+  ],
   "additionalProperties": false
 }

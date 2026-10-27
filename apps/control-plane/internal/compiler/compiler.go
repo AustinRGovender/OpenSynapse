@@ -141,9 +141,10 @@ type compiler struct {
 	needsExec   bool
 	needsVars   bool
 
-	opts    Options
-	control bool // emit the xk6-kv control scenario and pacing
-	result_ Result
+	opts       Options
+	control    bool // emit the xk6-kv control scenario and pacing
+	thresholds []threshold
+	result_    Result
 }
 
 type scenarioOut struct {
@@ -194,6 +195,17 @@ func isVUBased(executor string) bool {
 func (c *compiler) compilePlan(root db.Node) error {
 	if root.Type != "plan" {
 		return fmt.Errorf("expected root node type 'plan', got %q", root.Type)
+	}
+	var planProps struct {
+		Thresholds []threshold `json:"thresholds"`
+	}
+	if len(root.Properties) > 0 {
+		json.Unmarshal(root.Properties, &planProps)
+	}
+	for _, t := range planProps.Thresholds {
+		if thresholdMetricRe.MatchString(t.Metric) && strings.TrimSpace(t.Condition) != "" {
+			c.thresholds = append(c.thresholds, t)
+		}
 	}
 
 	// Pass 1: data sources and scenario discovery.
@@ -1270,17 +1282,22 @@ func (c *compiler) render() string {
 		sb.WriteString(c.dataSources.String())
 	}
 
-	if len(c.scenarios) > 0 {
+	if len(c.scenarios) > 0 || len(c.thresholds) > 0 {
 		sb.WriteString("export const options = {\n")
-		sb.WriteString("  scenarios: {\n")
-		for _, s := range c.scenarios {
-			sb.WriteString(fmt.Sprintf("    '%s': {\n", s.key))
-			for _, o := range s.options {
-				sb.WriteString("      " + o + ",\n")
-			}
-			sb.WriteString("    },\n")
+		if len(c.thresholds) > 0 {
+			sb.WriteString(renderThresholds(c.thresholds))
 		}
-		sb.WriteString("  },\n")
+		if len(c.scenarios) > 0 {
+			sb.WriteString("  scenarios: {\n")
+			for _, s := range c.scenarios {
+				sb.WriteString(fmt.Sprintf("    '%s': {\n", s.key))
+				for _, o := range s.options {
+					sb.WriteString("      " + o + ",\n")
+				}
+				sb.WriteString("    },\n")
+			}
+			sb.WriteString("  },\n")
+		}
 		sb.WriteString("};\n\n")
 	}
 
@@ -1400,6 +1417,38 @@ function __osPace() {
   __osNext = Math.max(__osNext, now) + interval;
 }
 `
+
+// threshold is a plan-level pass/fail criterion (k6 thresholds).
+type threshold struct {
+	Metric      string `json:"metric"`
+	Condition   string `json:"condition"` // e.g. "rate<0.05", "p(95)<500"
+	AbortOnFail bool   `json:"abort_on_fail"`
+}
+
+// thresholdMetricRe accepts metric names with optional tag filters, e.g.
+// http_req_duration{group:::Checkout}.
+var thresholdMetricRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\{[^{}']*\})?$`)
+
+// renderThresholds emits options.thresholds; conditions for the same metric
+// are grouped.
+func renderThresholds(ts []threshold) string {
+	var order []string
+	byMetric := map[string][]string{}
+	for _, t := range ts {
+		if _, ok := byMetric[t.Metric]; !ok {
+			order = append(order, t.Metric)
+		}
+		entry := fmt.Sprintf("{ threshold: '%s', abortOnFail: %v }", sanitizeJSString(strings.TrimSpace(t.Condition)), t.AbortOnFail)
+		byMetric[t.Metric] = append(byMetric[t.Metric], entry)
+	}
+	var b strings.Builder
+	b.WriteString("  thresholds: {\n")
+	for _, m := range order {
+		b.WriteString(fmt.Sprintf("    '%s': [%s],\n", m, strings.Join(byMetric[m], ", ")))
+	}
+	b.WriteString("  },\n")
+	return b.String()
+}
 
 // --- Helper types for JSON unmarshaling ---
 

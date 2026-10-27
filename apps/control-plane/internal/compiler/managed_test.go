@@ -219,3 +219,27 @@ func TestParseDuration(t *testing.T) {
 		t.Error("expected error for invalid duration")
 	}
 }
+
+func TestPlanThresholdsAreEmitted(t *testing.T) {
+	plan := planWith(scenarioNode("S", `{"executor":"constant-vus","vus":1,"duration":"5s"}`, httpNode("r", "http://x/")))
+	plan.Root.Properties = json.RawMessage(`{"thresholds":[
+		{"metric":"http_req_failed","condition":"rate<0.05","abort_on_fail":true},
+		{"metric":"http_req_duration","condition":"p(95)<500"},
+		{"metric":"bad metric'); evil();//","condition":"x"}]}`)
+	script, err := Compile(plan)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, want := range []string{
+		"thresholds: {",
+		"'http_req_failed': [{ threshold: 'rate<0.05', abortOnFail: true }]",
+		"'http_req_duration': [{ threshold: 'p(95)<500', abortOnFail: false }]",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("missing %q\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, "evil") {
+		t.Error("invalid metric names must be dropped")
+	}
+}
