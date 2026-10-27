@@ -1355,6 +1355,10 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["APIError"];
         };
+        Execution: {
+            max_workers: number;
+            mode: string;
+        };
         ExportRequestDoc: {
             /** @enum {string} */
             format: "json" | "csv" | "html" | "pdf";
@@ -1446,8 +1450,10 @@ export interface components {
             paused: boolean;
             remaining_seconds: number;
             rps_target: number;
+            starting: boolean;
             stopping: boolean;
             target_vus: number;
+            workers: number;
         };
         LoginResponse: {
             /** Format: date-time */
@@ -1758,8 +1764,10 @@ export interface components {
             samples_bytes: number;
         };
         SystemInfo: {
+            artifacts: string;
             data_dir: string;
             database: string;
+            execution: components["schemas"]["Execution"];
             k6: {
                 available: boolean;
                 kv: boolean;

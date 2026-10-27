@@ -33,6 +33,10 @@ export function RunConfigDialog({
   starting?: boolean
 }) {
   const kv = useUIStore((s) => s.system?.k6.kv ?? false)
+  const execution = useUIStore((s) => s.system?.execution)
+  const maxWorkers = execution?.mode === 'kubernetes' ? execution.max_workers : 1
+  const [workersText, setWorkers] = useState('1')
+  const workers = clampInt(workersText, 1, maxWorkers, 1)
   const [choice, setChoice] = useState<Choice>({ kind: 'plan' })
   const [vusText, setVus] = useState('10')
   const [secondsText, setSeconds] = useState('60')
@@ -52,7 +56,7 @@ export function RunConfigDialog({
   const templateProfile = template ? describeProfile(template.scenarioProperties) : null
   const vuBased = choice.kind === 'plan' ? plan.vuBased : choice.kind === 'custom' ? true : (templateProfile?.vuBased ?? true)
 
-  const parameters = useMemo<RunParameters | undefined>(() => {
+  const profileParameters = useMemo<RunParameters | undefined>(() => {
     const limit = vuBased && Number(rps) > 0 ? { rps_target: Number(rps) } : {}
     if (choice.kind === 'plan') return Object.keys(limit).length ? limit : undefined
     if (choice.kind === 'custom') return { vus_target: vus, duration_seconds: seconds, ...limit }
@@ -67,6 +71,7 @@ export function RunConfigDialog({
     }
     return { vus_target: Number(p.vus ?? 1), duration_seconds: parseDurationToSeconds(p.duration as string), ...limit }
   }, [choice, vus, seconds, rps, template, vuBased])
+  const parameters = workers > 1 ? { ...profileParameters, worker_count: workers } : profileParameters
 
   const summary = choice.kind === 'plan' ? plan.text : choice.kind === 'custom' ? `${vus} VUs for ${formatSeconds(seconds)}` : (templateProfile?.text ?? '')
   // Only VU-based plans can take another profile; arrival-rate and iteration
@@ -84,6 +89,7 @@ export function RunConfigDialog({
           <span className="mr-auto self-center text-xs text-slate-400">
             {summary}
             {parameters?.rps_target && vuBased ? ` · at most ${parameters.rps_target} RPS` : ''}
+            {workers > 1 ? ` · ${workers} workers` : ''}
           </span>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={starting} onClick={() => onConfirm({ parameters, environment_id: envId || undefined })}>{starting ? 'Starting…' : 'Start run'}</Button>
@@ -98,6 +104,11 @@ export function RunConfigDialog({
               {envs.map((e) => <option key={e.id} value={e.id}>{e.name}{e.id === defaultEnvironmentId ? ' (plan default)' : ''}</option>)}
             </Select>
           </Field>
+          {maxWorkers > 1 && (
+            <Field label="Workers" hint={`k6 runner pods sharing the load (1–${maxWorkers}). VU counts and RPS limits are totals across all workers.`}>
+              <TextInput type="number" min={1} max={maxWorkers} value={workersText} onChange={(e) => setWorkers(e.target.value)} />
+            </Field>
+          )}
           <Field label="RPS limit (optional)" hint={!vuBased ? 'Arrival-rate profiles set their own rate.' : kv ? 'Caps total requests per second; adjustable while running.' : 'Needs k6 with xk6-kv (bundled in the Docker image).'}>
             <TextInput type="number" min={0} value={rps} disabled={!vuBased || !kv} onChange={(e) => setRps(e.target.value)} placeholder="No limit" />
           </Field>

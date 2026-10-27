@@ -104,6 +104,14 @@ export const LiveControlPaused: Story = {
   ),
 }
 
+export const LiveControlWorkersStarting: Story = {
+  render: () => (
+    <div className="flex h-[720px] justify-end">
+      <LiveControlPanel live={{ ...live, workers: 4, starting: true, active_vus: 0, elapsed_seconds: 0 }} currentRps={0} control={async () => live} stop={async () => {}} kill={async () => {}} />
+    </div>
+  ),
+}
+
 export const LiveControlUnavailable: Story = {
   render: () => (
     <div className="flex h-[400px] justify-end">

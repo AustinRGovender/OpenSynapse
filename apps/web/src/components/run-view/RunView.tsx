@@ -27,7 +27,9 @@ function profileText(run: Run): string {
     const scenario = root?.children?.find((c) => c.type === 'scenario' && c.enabled)
     text = `${describeProfile((scenario?.properties as Record<string, unknown>) ?? null).text} (plan profile)`
   }
-  return p.rps_target ? `${text} · RPS limit ${p.rps_target}` : text
+  if (p.rps_target) text += ` · RPS limit ${p.rps_target}`
+  if (p.worker_count && p.worker_count > 1) text += ` · ${p.worker_count} workers`
+  return text
 }
 
 function useTick(active: boolean) {

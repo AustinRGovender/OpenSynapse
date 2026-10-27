@@ -147,6 +147,8 @@ export const live: LiveState = {
   elapsed_seconds: 95,
   remaining_seconds: 205,
   max_duration_seconds: 1500,
+  workers: 1,
+  starting: false,
 }
 
 export const fragments: Fragment[] = [

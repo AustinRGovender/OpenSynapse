@@ -853,6 +853,21 @@
         ],
         "type": "object"
       },
+      "Execution": {
+        "properties": {
+          "max_workers": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "max_workers",
+          "mode"
+        ],
+        "type": "object"
+      },
       "ExportRequestDoc": {
         "properties": {
           "format": {
@@ -1230,10 +1245,16 @@
           "rps_target": {
             "type": "integer"
           },
+          "starting": {
+            "type": "boolean"
+          },
           "stopping": {
             "type": "boolean"
           },
           "target_vus": {
+            "type": "integer"
+          },
+          "workers": {
             "type": "integer"
           }
         },
@@ -1249,8 +1270,10 @@
           "paused",
           "remaining_seconds",
           "rps_target",
+          "starting",
           "stopping",
-          "target_vus"
+          "target_vus",
+          "workers"
         ],
         "type": "object"
       },
@@ -2442,11 +2465,17 @@
       },
       "SystemInfo": {
         "properties": {
+          "artifacts": {
+            "type": "string"
+          },
           "data_dir": {
             "type": "string"
           },
           "database": {
             "type": "string"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/Execution"
           },
           "k6": {
             "properties": {
@@ -2515,8 +2544,10 @@
           }
         },
         "required": [
+          "artifacts",
           "data_dir",
           "database",
+          "execution",
           "k6",
           "live_control",
           "mode",

@@ -67,8 +67,13 @@ function Controls({ live, currentRps, control, stop, kill, disabled }: Props & {
     <aside aria-label="Live control" className="w-80 shrink-0 overflow-y-auto border-l border-slate-800 bg-slate-950">
       <div className="flex items-center justify-between px-4 py-3">
         <h2 className="text-sm font-semibold text-slate-100">Live control</h2>
-        {live.stopping ? <span className="text-xs text-amber-300">Stopping…</span> : live.paused ? <span className="text-xs text-amber-300">Paused</span> : <span className="text-xs text-teal-300">Running</span>}
+        {live.stopping ? <span className="text-xs text-amber-300">Stopping…</span> : live.starting ? <span className="text-xs text-sky-300">Starting…</span> : live.paused ? <span className="text-xs text-amber-300">Paused</span> : <span className="text-xs text-teal-300">Running</span>}
       </div>
+      {live.workers > 1 && (
+        <p className="px-4 pb-2 text-xs text-slate-400">
+          {live.starting ? `Waiting for ${live.workers} workers to be scheduled and start…` : `Load is shared by ${live.workers} workers; changes reach all of them.`}
+        </p>
+      )}
 
       <Section
         title="Virtual users"

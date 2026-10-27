@@ -31,3 +31,11 @@ export const ArrivalRatePlan: Story = {
 }
 
 export const Starting: Story = { args: { starting: true } }
+
+/** Cluster mode: runs can be spread over several k6 workers. */
+export const ClusterMode: Story = {
+  render: (args) => {
+    useUIStore.setState({ system: { k6: { version: 'v1.8.2', kv: true }, execution: { mode: 'kubernetes', max_workers: 16 } } as never })
+    return <RunConfigDialog {...args} />
+  },
+}
