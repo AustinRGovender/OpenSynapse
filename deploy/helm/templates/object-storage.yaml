@@ -1,0 +1,84 @@
+{{- if .Values.objectStorage.enabled }}
+# S3-compatible storage for raw run samples (RustFS; see ADR-0012).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-object-storage
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: object-storage
+spec:
+  serviceName: {{ .Release.Name }}-object-storage
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "opensynapse.objectStorage.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "opensynapse.objectStorage.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: rustfs
+          image: "{{ .Values.objectStorage.image.repository }}:{{ .Values.objectStorage.image.tag }}"
+          imagePullPolicy: {{ .Values.objectStorage.image.pullPolicy }}
+          args: ["/data"]
+          ports:
+            - name: s3
+              containerPort: {{ .Values.objectStorage.port }}
+              protocol: TCP
+          env:
+            - name: RUSTFS_ADDRESS
+              value: ":{{ .Values.objectStorage.port }}"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-app
+                  key: s3-access-key
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-app
+                  key: s3-secret-key
+          readinessProbe:
+            tcpSocket:
+              port: s3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: s3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.objectStorage.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.objectStorage.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-object-storage
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: object-storage
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.objectStorage.port }}
+      targetPort: s3
+      protocol: TCP
+      name: s3
+  selector:
+    {{- include "opensynapse.objectStorage.selectorLabels" . | nindent 4 }}
+{{- end }}

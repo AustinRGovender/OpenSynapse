@@ -1,0 +1,28 @@
+OpenSynapse is starting in cluster mode (namespace {{ .Release.Namespace }}).
+
+Open the web UI:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/
+{{- end }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-web 8080:{{ .Values.web.port }}
+  then browse to http://localhost:8080/
+{{- end }}
+{{- if .Values.controlPlane.teamMode }}
+{{- if .Values.controlPlane.adminEmail }}
+
+Sign in as {{ .Values.controlPlane.adminEmail }} with the admin password you set.
+{{- else }}
+
+The first person to open the UI creates the admin account.
+{{- end }}
+{{- end }}
+
+Runs execute as k6-operator TestRuns in this namespace; choose the number of
+workers (up to {{ .Values.workers.maxPerRun }}) in the Run dialog.
+{{- if not .Values.installK6Operator }}
+
+installK6Operator is false: make sure the operator is installed and watches
+this namespace, or runs will not start.
+{{- end }}

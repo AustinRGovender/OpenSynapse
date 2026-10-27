@@ -24,6 +24,10 @@ spec:
             - name: http
               containerPort: {{ .Values.web.port }}
               protocol: TCP
+          env:
+            # nginx proxies /api to the control plane's Service.
+            - name: OPENSYNAPSE_API_UPSTREAM
+              value: "{{ .Release.Name }}-control-plane:{{ .Values.service.port }}"
           livenessProbe:
             httpGet:
               path: /

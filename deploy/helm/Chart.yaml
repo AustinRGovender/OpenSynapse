@@ -1,8 +1,15 @@
 apiVersion: v2
 name: opensynapse
-description: OpenSynapse — self-hosted performance testing platform
+description: OpenSynapse — self-hosted performance testing platform (cluster mode, k6-operator workers)
 type: application
-version: 0.1.0
-appVersion: "0.0.0"
+version: 0.2.0
+appVersion: "0.2.0"
 maintainers:
   - name: Austin Govender
+dependencies:
+  # Runs execute as k6-operator TestRuns. Set installK6Operator=false if the
+  # cluster already has the operator. Fetch with: helm dependency build deploy/helm
+  - name: k6-operator
+    version: 4.7.0
+    repository: oci://ghcr.io/grafana/helm-charts
+    condition: installK6Operator

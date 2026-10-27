@@ -1,25 +1,56 @@
-replicaCount: 1
+# OpenSynapse on Kubernetes (cluster mode). Data lives in Postgres, raw run
+# samples in S3-compatible object storage, and each run executes as a
+# k6-operator TestRun whose runner pods share the load.
 
 controlPlane:
   image:
     repository: ghcr.io/opensynapse/control-plane
-    tag: latest
+    tag: "0.2.0"
     pullPolicy: IfNotPresent
   port: 8090
+  # Require sign-in. With no admin below, the first visitor creates one.
+  teamMode: true
+  adminEmail: ""
+  adminPassword: ""
+  # Encrypts stored secrets (environment secrets, AI keys): 32 random bytes,
+  # base64. Generated on install and kept on upgrade when left empty. Losing
+  # it makes stored secrets unreadable.
+  secretKey: ""
+  # Extra Host header values the API answers to; the services' DNS names and
+  # ingress hosts are added automatically.
+  allowedHosts: []
+  logFormat: json
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
     limits:
-      cpu: 500m
+      cpu: "1"
       memory: 512Mi
+
+# Runner pods (one per worker) that execute k6.
+workers:
+  # An image with k6 and the xk6-kv extension; defaults to the control-plane image.
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Most workers one run may use.
+  maxPerRun: 16
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
 
 web:
   enabled: true
   replicaCount: 1
   image:
     repository: ghcr.io/opensynapse/web
-    tag: latest
+    tag: "0.2.0"
     pullPolicy: IfNotPresent
   port: 8080
   resources:
@@ -30,47 +61,68 @@ web:
       cpu: 200m
       memory: 256Mi
 
+# Bundled Postgres. Set enabled=false and externalDatabase.dsn to use your own.
 postgres:
   enabled: true
   image:
     repository: postgres
-    tag: "16-alpine"
+    tag: "17-alpine"
     pullPolicy: IfNotPresent
   port: 5432
   database: opensynapse
   username: opensynapse
-  password: opensynapse
+  # Generated on install and kept on upgrade when left empty.
+  password: ""
   storage: 5Gi
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "1"
+      memory: 1Gi
 
-minio:
+externalDatabase:
+  # libpq URL, e.g. postgres://user:pass@db.example.com:5432/opensynapse?sslmode=require
+  dsn: ""
+
+# Bundled S3-compatible object storage (RustFS, Apache-2.0; see ADR-0012).
+# Set enabled=false and fill externalObjectStorage to use S3, MinIO, etc.
+objectStorage:
   enabled: true
   image:
-    repository: minio/minio
-    tag: latest
+    repository: rustfs/rustfs
+    tag: "1.0.4"
     pullPolicy: IfNotPresent
   port: 9000
-  consolePort: 9001
-  accessKey: minioadmin
-  secretKey: minioadmin
   bucket: opensynapse
+  # Generated on install and kept on upgrade when left empty.
+  accessKey: ""
+  secretKey: ""
   storage: 10Gi
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "1"
+      memory: 1Gi
 
-k6Operator:
-  enabled: false
+externalObjectStorage:
+  endpoint: ""   # host:port, no scheme
+  bucket: opensynapse
+  accessKey: ""
+  secretKey: ""
+  useSSL: true
+
+# Install the grafana/k6-operator chart with OpenSynapse. Set false if the
+# cluster already runs the operator (it must watch this namespace).
+installK6Operator: true
+# Values for the k6-operator chart. It runs in the release namespace, which
+# already exists, so it must not try to create it.
+k6-operator:
+  namespace:
+    create: false
 
 service:
   type: ClusterIP
