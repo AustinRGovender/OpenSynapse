@@ -9,6 +9,7 @@ import { canEdit, useAuthStore } from '../stores/auth-store'
 import { type AuthType, type BodyType, type HttpMethod, type KeyValueRow, usePlaygroundStore } from '../stores/playground-store'
 import { useToast } from '../stores/ui-store'
 import { formatBytes, formatMs, formatNumber } from '../utils/format'
+import { clampInt } from '../utils/number'
 
 const METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
@@ -341,8 +342,10 @@ function ResponsePane() {
 function MicroTestPanel({ onClose }: { onClose: () => void }) {
   const { micro, microRunning, microTest } = usePlaygroundStore()
   const { metric } = useChartTheme()
-  const [vus, setVus] = useState(5)
-  const [seconds, setSeconds] = useState(10)
+  const [vusText, setVus] = useState('5')
+  const [secondsText, setSeconds] = useState('10')
+  const vus = clampInt(vusText, 1, 50, 5)
+  const seconds = clampInt(secondsText, 1, 60, 10)
   const s = micro?.summary
 
   return (
@@ -352,8 +355,8 @@ function MicroTestPanel({ onClose }: { onClose: () => void }) {
           <p className="text-sm font-medium text-slate-200">Micro-test</p>
           <p className="text-[11px] text-slate-500">A short k6 burst of this one request (1–50 VUs, 1–60 s). It is not saved as a run.</p>
         </div>
-        <div className="w-24"><Field label="VUs"><TextInput type="number" min={1} max={50} value={vus} onChange={(e) => setVus(Math.min(50, Math.max(1, Number(e.target.value))))} /></Field></div>
-        <div className="w-28"><Field label="Seconds"><TextInput type="number" min={1} max={60} value={seconds} onChange={(e) => setSeconds(Math.min(60, Math.max(1, Number(e.target.value))))} /></Field></div>
+        <div className="w-24"><Field label="VUs"><TextInput type="number" min={1} max={50} value={vusText} onChange={(e) => setVus(e.target.value)} /></Field></div>
+        <div className="w-28"><Field label="Seconds"><TextInput type="number" min={1} max={60} value={secondsText} onChange={(e) => setSeconds(e.target.value)} /></Field></div>
         <Button variant="primary" disabled={microRunning} onClick={() => microTest(vus, seconds)}>{microRunning ? `Running for ${seconds}s…` : 'Start micro-test'}</Button>
         <Button variant="ghost" className="ml-auto" onClick={onClose}>Close</Button>
       </div>

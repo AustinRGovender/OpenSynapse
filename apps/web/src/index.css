@@ -49,12 +49,15 @@ body {
   }
 }
 
-/* React Flow's own controls follow the theme. */
-.react-flow__controls-button {
-  @apply border-slate-700 bg-slate-800 fill-slate-300 text-slate-300;
-}
-.react-flow__controls-button:hover {
-  @apply bg-slate-700;
+/* React Flow's own controls follow the theme. Its variables are used rather
+   than its classes because its stylesheet loads later, with the builder. */
+.react-flow {
+  --xy-controls-button-background-color: var(--color-slate-800);
+  --xy-controls-button-background-color-hover: var(--color-slate-700);
+  --xy-controls-button-color: var(--color-slate-300);
+  --xy-controls-button-color-hover: var(--color-slate-100);
+  --xy-controls-button-border-color: var(--color-slate-700);
+  --xy-controls-box-shadow: none;
 }
 .react-flow__attribution {
   display: none;

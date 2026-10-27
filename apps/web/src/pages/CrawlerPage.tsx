@@ -105,8 +105,8 @@ function ConfigForm() {
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Link depth"><TextInput type="number" min={1} max={10} value={config.depth} onChange={(e) => set({ depth: Math.max(1, Number(e.target.value)) })} /></Field>
-            <Field label="Request limit"><TextInput type="number" min={1} max={5000} value={config.limit} onChange={(e) => set({ limit: Math.max(1, Number(e.target.value)) })} /></Field>
+            <Field label="Link depth"><TextInput type="number" min={1} max={10} value={config.depth || ''} onChange={(e) => set({ depth: Number(e.target.value) })} /></Field>
+            <Field label="Request limit"><TextInput type="number" min={1} max={5000} value={config.limit || ''} onChange={(e) => set({ limit: Number(e.target.value) })} /></Field>
           </div>
           <label className="flex items-center gap-2 text-xs text-slate-300">
             <input type="checkbox" checked={config.same_origin} onChange={(e) => set({ same_origin: e.target.checked })} className="accent-teal-500" />

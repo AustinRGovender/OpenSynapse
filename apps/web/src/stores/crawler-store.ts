@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Crawl } from '@opensynapse/api-client'
 import { api, errorMessage, unwrap } from '../api'
+import { clampInt } from '../utils/number'
 
 export type CrawlEngine = 'rod' | 'colly' | 'zap'
 export type CrawlAuthType = 'none' | 'basic' | 'bearer' | 'form_login'
@@ -99,9 +100,9 @@ export const useCrawlerStore = create<State>((set, get) => {
             : {
                 entry_url: url,
                 engine: c.engine,
-                depth: c.depth,
+                depth: clampInt(c.depth, 1, 10, 3),
                 same_origin: c.same_origin,
-                limit: c.limit,
+                limit: clampInt(c.limit, 1, 5000, 500),
                 blocklist: c.blocklist.split(',').map((s) => s.trim()).filter(Boolean),
                 auth: c.auth_type === 'none' ? undefined : { type: c.auth_type, username: c.username, password: c.password, token: c.token },
               }

@@ -4,6 +4,7 @@ import { api, unwrap } from '../../api'
 import { useUIStore } from '../../stores/ui-store'
 import { parseDurationToSeconds } from '../../utils/duration'
 import { formatSeconds } from '../../utils/format'
+import { clampInt } from '../../utils/number'
 import { describeProfile, type Stage } from '../../utils/profile'
 import { LoadCurveSvg } from '../templates/LoadCurveSvg'
 import { TEMPLATES } from '../templates/template-data'
@@ -33,8 +34,10 @@ export function RunConfigDialog({
 }) {
   const kv = useUIStore((s) => s.system?.k6.kv ?? false)
   const [choice, setChoice] = useState<Choice>({ kind: 'plan' })
-  const [vus, setVus] = useState(10)
-  const [seconds, setSeconds] = useState(60)
+  const [vusText, setVus] = useState('10')
+  const [secondsText, setSeconds] = useState('60')
+  const vus = clampInt(vusText, 1, 100000, 1)
+  const seconds = clampInt(secondsText, 1, 7 * 86400, 60)
   const [rps, setRps] = useState('')
   const [envs, setEnvs] = useState<Environment[]>([])
   const [envId, setEnvId] = useState<string>(defaultEnvironmentId ?? '')
@@ -123,8 +126,8 @@ export function RunConfigDialog({
 
         {choice.kind === 'custom' && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Virtual users"><TextInput type="number" min={1} value={vus} onChange={(e) => setVus(Math.max(1, Number(e.target.value)))} /></Field>
-            <Field label="Duration (seconds)"><TextInput type="number" min={1} value={seconds} onChange={(e) => setSeconds(Math.max(1, Number(e.target.value)))} /></Field>
+            <Field label="Virtual users"><TextInput type="number" min={1} value={vusText} onChange={(e) => setVus(e.target.value)} /></Field>
+            <Field label="Duration (seconds)"><TextInput type="number" min={1} value={secondsText} onChange={(e) => setSeconds(e.target.value)} /></Field>
           </div>
         )}
         {locked && <p className="text-xs text-amber-300">This plan uses an arrival-rate or iteration executor, so it runs with its own profile. Change the scenario in the builder to use a different load shape.</p>}

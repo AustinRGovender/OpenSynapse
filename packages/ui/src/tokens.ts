@@ -66,7 +66,8 @@ export const colors = {
     5: '#d55e00',
     6: '#56b4e9',
     7: '#f0e442',
-    8: '#000000',
+    // Okabe–Ito's black, lightened so it shows on dark backgrounds too.
+    8: '#999999',
   },
 
   // Chart grid and axis strokes, per theme.
@@ -92,11 +93,11 @@ export function metricColors(name: ChartPaletteName = 'default') {
   const p = chartPalette(name)
   return {
     rps: p[0],
-    p50: p[5],
+    p50: p[7],
     p90: p[1],
     p95: p[2],
     p99: p[4],
-    vus: p[7],
+    vus: p[5],
     sent: p[1],
     received: p[0],
     error: colors.error,

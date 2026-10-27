@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MetricPoint, RunEvent } from '@opensynapse/api-client'
+import type { MetricPoint, Node as PlanNode, Run, RunEvent } from '@opensynapse/api-client'
 import { api, downloadFile, errorMessage, unwrap } from '../../api'
 import { canEdit, useAuthStore } from '../../stores/auth-store'
 import { TERMINAL, useRunStore } from '../../stores/run-store'
 import { useToast } from '../../stores/ui-store'
 import { eventText, formatBytes, formatMs, formatNumber, formatSeconds, runDuration } from '../../utils/format'
 import { navigate } from '../../utils/navigate'
+import { describeProfile } from '../../utils/profile'
 import { AIAnalysisButton, AIInsights } from '../ai/AIAnalysis'
 import { Button, ConfirmDialog, EmptyState, Spinner, StatusBadge } from '../ui/primitives'
 import { LiveControlPanel } from './LiveControlPanel'
@@ -15,6 +16,20 @@ import { type Marker, MetricChart } from './MetricChart'
 import { ChecksTable, EndpointTable, ErrorLog, Timeline } from './RunTables'
 
 /** Re-renders every second while `active`, for live elapsed times. */
+/** The load the run was started with: its overrides, or the plan's own profile. */
+function profileText(run: Run): string {
+  const p = run.parameters
+  let text: string
+  if (p.stages?.length) text = `${p.stages.length} stages up to ${Math.max(...p.stages.map((st) => st.target))} VUs`
+  else if (p.vus_target && p.duration_seconds) text = `${p.vus_target} VUs for ${formatSeconds(p.duration_seconds)}`
+  else {
+    const root = run.plan_snapshot as PlanNode | undefined
+    const scenario = root?.children?.find((c) => c.type === 'scenario' && c.enabled)
+    text = `${describeProfile((scenario?.properties as Record<string, unknown>) ?? null).text} (plan profile)`
+  }
+  return p.rps_target ? `${text} · RPS limit ${p.rps_target}` : text
+}
+
 function useTick(active: boolean) {
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -189,9 +204,7 @@ export function RunView({ runId }: { runId: string }) {
 
         <p className="mb-4 text-xs text-slate-500">
           Started {run.started_at ? new Date(run.started_at).toLocaleString() : '—'}
-          {run.created_by_name && <> by {run.created_by_name}</>} · target {run.parameters.vus_target ?? '?'} VUs
-          {run.parameters.stages?.length ? ` over ${run.parameters.stages.length} stages` : ''} for {formatSeconds(run.parameters.duration_seconds ?? 0)}
-          {run.parameters.rps_target ? ` · RPS limit ${run.parameters.rps_target}` : ''}
+          {run.created_by_name && <> by {run.created_by_name}</>} · {profileText(run)}
         </p>
 
         {/* Outcome */}

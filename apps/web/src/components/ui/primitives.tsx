@@ -104,13 +104,24 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const titleId = useId()
+  // Callers usually pass an inline onClose; reading it through a ref keeps the
+  // effect below from re-running (and stealing focus) on every keystroke.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const previous = document.activeElement as HTMLElement | null
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current()
     document.addEventListener('keydown', onKey)
-    ref.current?.focus()
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+    // Leave focus on an autoFocus field; otherwise move it into the dialog.
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus()
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      previous?.focus?.()
+    }
+  }, [open])
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
