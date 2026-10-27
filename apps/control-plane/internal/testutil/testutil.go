@@ -82,6 +82,9 @@ func NewTestServerWith(t *testing.T, opts Options) *TestServer {
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, envStore, opts.Engine, ws)
 	runHandlers.DataDir = opts.DataDir
 
+	playground := handlers.NewPlaygroundHandlers(collectionStore)
+	playground.Envs = envStore
+	playground.Engine = opts.Engine
 	system := &handlers.SystemHandlers{Engine: opts.Engine, WS: ws, Mode: "desktop", DataDir: opts.DataDir}
 	deps := router.Deps{
 		Plans:      handlers.NewPlanHandlers(planStore),
@@ -89,7 +92,7 @@ func NewTestServerWith(t *testing.T, opts Options) *TestServer {
 		Runs:       runHandlers,
 		Reports:    handlers.NewReportHandlers(reportStore, runStore),
 		Exports:    handlers.NewExportHandlers(runHandlers),
-		Playground: handlers.NewPlaygroundHandlers(collectionStore),
+		Playground: playground,
 		Crawls:     handlers.NewCrawlHandlers(crawlStore, planStore),
 		AI:         handlers.NewAIHandlers(aiStore, runStore, reportStore),
 		Fragments:  handlers.NewFragmentHandlers(fragmentStore),

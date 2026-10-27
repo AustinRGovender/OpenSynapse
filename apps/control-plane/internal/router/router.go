@@ -47,6 +47,7 @@ func New(d Deps) http.Handler {
 	handle("GET /ready", handlers.Ready)
 	handle("GET /version", handlers.Version)
 	handle("GET /metrics", observability.Default.Handler)
+	handle("GET /openapi.json", handlers.OpenAPI)
 	if d.System != nil {
 		handle("GET /api/v1/system/info", d.System.Info)
 	}
@@ -125,6 +126,13 @@ func New(d Deps) http.Handler {
 	handle("POST /api/v1/playground/request", d.Playground.ExecuteRequest)
 	handle("GET /api/v1/playground/collections", d.Playground.ListCollections)
 	handle("POST /api/v1/playground/collections", d.Playground.CreateCollection)
+	handle("PUT /api/v1/playground/collections/{id}", d.Playground.UpdateCollection)
+	handle("DELETE /api/v1/playground/collections/{id}", d.Playground.DeleteCollection)
+	handle("POST /api/v1/playground/microtest", d.Playground.MicroTest)
+	handle("POST /api/v1/playground/oauth/start", d.Playground.OAuthStart)
+	handle("GET /api/v1/playground/oauth/callback", d.Playground.OAuthCallback)
+	handle("GET /api/v1/playground/oauth/result", d.Playground.OAuthResult)
+	handle("POST /api/v1/playground/oauth/client-credentials", d.Playground.OAuthClientCredentials)
 
 	// Crawler API (section 2.6)
 	handle("POST /api/v1/crawls", d.Crawls.Start)

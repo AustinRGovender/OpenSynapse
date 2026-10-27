@@ -3,7 +3,7 @@ WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 COPY . .
-RUN go build -o error-api main.go
+RUN go build -o error-api .
 
 FROM alpine:3.24
 WORKDIR /root/

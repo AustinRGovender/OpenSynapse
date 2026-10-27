@@ -130,6 +130,9 @@ func main() {
 	}
 	settingsHandlers := handlers.NewSettingsHandlers(settingsStore, runStore, system)
 	planHandlers := handlers.NewPlanHandlers(planStore)
+	playgroundHandlers := handlers.NewPlaygroundHandlers(collectionStore)
+	playgroundHandlers.Envs = envStore
+	playgroundHandlers.Engine = eng
 	planHandlers.Settings = settingsStore
 
 	observability.Default.Gauge("opensynapse_websocket_clients", func() float64 { return float64(ws.ClientCount()) })
@@ -153,7 +156,7 @@ func main() {
 		Runs:       runHandlers,
 		Reports:    handlers.NewReportHandlers(reportStore, runStore),
 		Exports:    handlers.NewExportHandlers(runHandlers),
-		Playground: handlers.NewPlaygroundHandlers(collectionStore),
+		Playground: playgroundHandlers,
 		Crawls:     handlers.NewCrawlHandlers(crawlStore, planStore),
 		AI:         handlers.NewAIHandlers(aiStore, runStore, reportStore),
 		Fragments:  handlers.NewFragmentHandlers(fragmentStore),

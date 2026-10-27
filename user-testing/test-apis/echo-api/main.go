@@ -72,12 +72,15 @@ func main() {
 		})
 	})
 
+	registerAuthRoutes(router)
+
 	fmt.Println("🔊 Echo API starting on port 9001")
 	fmt.Println("📍 Endpoints:")
 	fmt.Println("   GET  /health")
 	fmt.Println("   POST /echo")
 	fmt.Println("   GET  /delay/:ms")
 	fmt.Println("   GET  /status/:code")
+	fmt.Println("   Auth demos: /auth/basic, /auth/api-key, /auth/digest, /oauth/authorize, /oauth/token, /oauth/me")
 
 	if err := router.Run(":9001"); err != nil {
 		log.Fatal("Failed to start Echo API:", err)
