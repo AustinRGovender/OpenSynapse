@@ -56,6 +56,40 @@ jobs:
       - name: Lint
         run: pnpm --filter web lint
 
+      - name: Test
+        run: pnpm --filter web test
+
+      # Every component has a story; building them all catches broken ones.
+      - name: Build Storybook
+        run: pnpm --filter web build-storybook
+
+  api-client:
+    name: API client (generated from the OpenAPI document)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/control-plane/go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v6
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Regenerates openapi.json and schema.d.ts and fails if they differ from
+      # what is committed: run `pnpm --filter @opensynapse/api-client generate`.
+      - name: Check for drift
+        run: pnpm --filter @opensynapse/api-client check
+
+      - name: Type-check
+        run: pnpm --filter @opensynapse/api-client typecheck
+
   helm:
     name: Helm (chart validation)
     runs-on: ubuntu-latest
