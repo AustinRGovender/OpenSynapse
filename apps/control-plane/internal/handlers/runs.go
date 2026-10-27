@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -234,9 +235,10 @@ func (h *RunHandlers) Start(w http.ResponseWriter, r *http.Request) {
 		}
 		spec.Schedule = &sched
 	}
+	spec.ControlToken = randomToken()
+	spec.IngestURL = h.ControlBaseURL + "/api/v1/runs/" + run.ID + "/ingest"
 	if compiled.Control {
 		spec.ControlURL = h.ControlBaseURL + "/api/v1/runs/" + run.ID + "/control-state"
-		spec.ControlToken = randomToken()
 	}
 	if h.Artifacts != nil {
 		key := artifacts.RunSamplesKey(run.ID)
@@ -300,7 +302,8 @@ func (h *RunHandlers) finishRun(runID string, res engine.Result) {
 			log.Printf("run %s: store summary: %v", runID, err)
 		}
 	}
-	h.runs.UpdateStatus(runID, res.Status)
+	// Events first, then the status: whoever sees the run finished also
+	// sees why it finished.
 	if res.Status == "failed" && res.Message != "" {
 		h.addEvent(runID, "error", map[string]any{"message": res.Message})
 	}
@@ -309,6 +312,7 @@ func (h *RunHandlers) finishRun(runID string, res engine.Result) {
 		payload["message"] = res.Message
 	}
 	h.addEvent(runID, "stop", payload)
+	h.runs.UpdateStatus(runID, res.Status)
 
 	run, err := h.runs.Get(runID)
 	if err != nil || run == nil {
@@ -621,6 +625,42 @@ func (h *RunHandlers) ControlState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// maxIngestBody bounds one worker batch (decompressed).
+const maxIngestBody = 16 << 20
+
+// Ingest receives aggregated metrics from a cluster run's workers. Like
+// control-state it is authenticated by the run's token, not a user's.
+func (h *RunHandlers) Ingest(w http.ResponseWriter, r *http.Request) {
+	if h.engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "ENGINE_NOT_AVAILABLE", "k6 engine is not available", nil)
+		return
+	}
+	var body io.Reader = r.Body
+	if r.Header.Get("Content-Encoding") == "gzip" {
+		zr, err := gzip.NewReader(r.Body)
+		if err != nil {
+			badRequest(w, "INVALID_BODY", "Body is not valid gzip", nil)
+			return
+		}
+		defer zr.Close()
+		body = zr
+	}
+	var batch engine.IngestBatch
+	if err := json.NewDecoder(io.LimitReader(body, maxIngestBody)).Decode(&batch); err != nil {
+		badRequest(w, "INVALID_JSON", "Body is not a valid metrics batch", nil)
+		return
+	}
+	if err := h.engine.Ingest(r.PathValue("id"), r.Header.Get("X-OpenSynapse-Run-Token"), &batch); err != nil {
+		if errors.Is(err, engine.ErrNotActive) {
+			writeError(w, http.StatusConflict, "RUN_NOT_ACTIVE", "The run is not executing", nil)
+			return
+		}
+		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error(), nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *RunHandlers) Stop(w http.ResponseWriter, r *http.Request) {

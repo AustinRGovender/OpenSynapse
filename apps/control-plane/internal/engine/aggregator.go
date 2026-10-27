@@ -46,8 +46,11 @@ type secondBucket struct {
 	bytesRecv    float64
 	durations    []float64
 	seen         int64 // durations observed (for reservoir sampling)
-	vus          int
-	hasVUs       bool
+	// hist holds the second's durations when they arrive pre-aggregated
+	// from cluster workers (see ingest.go).
+	hist   *histogram
+	vus    int
+	hasVUs bool
 }
 
 type endpointAgg struct {
@@ -95,6 +98,9 @@ type aggregator struct {
 	// instanceVUs is each k6 instance's latest VU gauge; the run's VU count
 	// is their sum.
 	instanceVUs map[string]int
+	// latest is the newest sample time seen from each running instance (its
+	// watermark); finished instances are removed. See watermark().
+	latest map[string]time.Time
 	// vuOffset is subtracted from each instance's VU gauge to hide its
 	// internal control VU.
 	vuOffset int
@@ -109,6 +115,7 @@ func newAggregator(vuOffset int) *aggregator {
 		vuOffset:  vuOffset,
 
 		instanceVUs: make(map[string]int),
+		latest:      make(map[string]time.Time),
 	}
 }
 
@@ -130,12 +137,15 @@ func (a *aggregator) ingest(instance string, line []byte) bool {
 		return false
 	}
 	tags := l.Data.Tags
-	if tags["scenario"] == ControlScenario {
-		return false
-	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if ts := l.Data.Time; ts.After(a.latest[instance]) {
+		a.latest[instance] = ts
+	}
+	if tags["scenario"] == ControlScenario {
+		return false
+	}
 
 	ts := l.Data.Time
 	if a.firstTS.IsZero() || ts.Before(a.firstTS) {
@@ -190,25 +200,30 @@ func (a *aggregator) ingest(instance string, line []byte) bool {
 		a.bytesRecv += v
 		a.bucket(sec).bytesRecv += v
 	case "vus":
-		own := int(v) - a.vuOffset
-		if own < 0 {
-			own = 0
-		}
-		a.instanceVUs[instance] = own
-		n := 0
-		for _, c := range a.instanceVUs {
-			n += c
-		}
-		b := a.bucket(sec)
-		b.vus, b.hasVUs = n, true
-		a.currentVUs = n
-		if n > a.peakVUs {
-			a.peakVUs = n
-		}
+		a.setInstanceVUs(instance, int(v), a.bucket(sec))
 	default:
 		return false
 	}
 	return true
+}
+
+// setInstanceVUs records an instance's VU gauge (which includes its control
+// VU); the run's VU count is the sum over instances. Callers hold a.mu.
+func (a *aggregator) setInstanceVUs(instance string, gauge int, b *secondBucket) {
+	own := gauge - a.vuOffset
+	if own < 0 {
+		own = 0
+	}
+	a.instanceVUs[instance] = own
+	n := 0
+	for _, c := range a.instanceVUs {
+		n += c
+	}
+	b.vus, b.hasVUs = n, true
+	a.currentVUs = n
+	if n > a.peakVUs {
+		a.peakVUs = n
+	}
 }
 
 func endpointKey(tags map[string]string) (method, name string) {
@@ -269,6 +284,28 @@ func (a *aggregator) recordError(ts time.Time, tags map[string]string) {
 	}
 }
 
+// watermark is the second up to which every running instance's samples have
+// arrived: the oldest of their newest sample times. k6 writes the VU gauge
+// every second, so it advances even while instances send no requests.
+func (a *aggregator) watermark() (int64, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var oldest time.Time
+	for _, t := range a.latest {
+		if oldest.IsZero() || t.Before(oldest) {
+			oldest = t
+		}
+	}
+	return oldest.Unix(), !oldest.IsZero()
+}
+
+// instanceDone stops a finished instance from holding back the watermark.
+func (a *aggregator) instanceDone(instance string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.latest, instance)
+}
+
 // takeErrors returns errors recorded since the previous call.
 func (a *aggregator) takeErrors() []db.RunError {
 	a.mu.Lock()
@@ -324,6 +361,11 @@ func (a *aggregator) pointFor(sec int64) db.MetricPoint {
 		p.P90MS = exactPercentile(b.durations, 0.90)
 		p.P95MS = exactPercentile(b.durations, 0.95)
 		p.P99MS = exactPercentile(b.durations, 0.99)
+	} else if b.hist != nil {
+		p.P50MS = b.hist.percentile(0.50)
+		p.P90MS = b.hist.percentile(0.90)
+		p.P95MS = b.hist.percentile(0.95)
+		p.P99MS = b.hist.percentile(0.99)
 	}
 	p.BytesSent = int64(b.bytesSent)
 	p.BytesReceived = int64(b.bytesRecv)

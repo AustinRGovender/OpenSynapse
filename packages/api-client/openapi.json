@@ -1009,6 +1009,176 @@
         ],
         "type": "object"
       },
+      "IngestBatch": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/IngestCheck"
+            },
+            "type": "array"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/IngestEndpoint"
+            },
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/RunError"
+            },
+            "type": "array"
+          },
+          "final": {
+            "type": "boolean"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "seconds": {
+            "items": {
+              "$ref": "#/components/schemas/IngestSecond"
+            },
+            "type": "array"
+          },
+          "through": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "through"
+        ],
+        "type": "object"
+      },
+      "IngestCheck": {
+        "properties": {
+          "fails": {
+            "type": "integer"
+          },
+          "group": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "passes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group",
+          "name"
+        ],
+        "type": "object"
+      },
+      "IngestEndpoint": {
+        "properties": {
+          "durations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestHist"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "method": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "name"
+        ],
+        "type": "object"
+      },
+      "IngestHist": {
+        "properties": {
+          "b": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "max": {
+            "type": "number"
+          },
+          "min": {
+            "type": "number"
+          },
+          "n": {
+            "type": "integer"
+          },
+          "s": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "b",
+          "max",
+          "min",
+          "n",
+          "s"
+        ],
+        "type": "object"
+      },
+      "IngestSecond": {
+        "properties": {
+          "bytes_received": {
+            "type": "number"
+          },
+          "bytes_sent": {
+            "type": "number"
+          },
+          "checks_failed": {
+            "type": "integer"
+          },
+          "checks_passed": {
+            "type": "integer"
+          },
+          "durations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestHist"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "t": {
+            "type": "integer"
+          },
+          "vus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "t"
+        ],
+        "type": "object"
+      },
       "ItemsAPIToken": {
         "properties": {
           "items": {
@@ -5403,6 +5573,51 @@
           }
         },
         "summary": "Export as json, csv (raw samples), html or pdf",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/ingest": {
+      "post": {
+        "operationId": "postRunsIdIngest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Aggregated metrics from a cluster run's k6 workers (per-run token; gzip accepted)",
         "tags": [
           "Runs"
         ]

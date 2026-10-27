@@ -112,9 +112,9 @@ func (h *ExportHandlers) exportCSV(w http.ResponseWriter, doc *RunReport, name s
 			defer f.Close()
 			if gz, err := gzip.NewReader(f); err == nil {
 				defer gz.Close()
-				cw.Write([]string{"timestamp", "metric", "value", "tags"})
 				s := bufio.NewScanner(gz)
 				s.Buffer(make([]byte, 64*1024), 4*1024*1024)
+				wrote := false
 				for s.Scan() {
 					var line struct {
 						Metric string `json:"metric"`
@@ -126,6 +126,10 @@ func (h *ExportHandlers) exportCSV(w http.ResponseWriter, doc *RunReport, name s
 					}
 					if json.Unmarshal(s.Bytes(), &line) != nil {
 						continue
+					}
+					if !wrote {
+						cw.Write([]string{"timestamp", "metric", "value", "tags"})
+						wrote = true
 					}
 					keys := make([]string, 0, len(line.Data.Tags))
 					for k := range line.Data.Tags {
@@ -143,12 +147,16 @@ func (h *ExportHandlers) exportCSV(w http.ResponseWriter, doc *RunReport, name s
 						strings.Join(tags, ";"),
 					})
 				}
-				return
+				if wrote {
+					return
+				}
+				// An empty archive: fall through to the per-second series.
 			}
 		}
 	}
 
-	// No raw archive (e.g. deleted or never written): per-second aggregates.
+	// No raw samples (deleted, never written, or a cluster run whose workers
+	// aggregate before reporting): per-second aggregates.
 	cw.Write([]string{"timestamp", "requests", "failed", "rps", "error_rate_pct", "p50_ms", "p90_ms", "p95_ms", "p99_ms",
 		"active_vus", "bytes_sent", "bytes_received", "iterations", "checks_passed", "checks_failed"})
 	f := func(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }

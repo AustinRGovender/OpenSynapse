@@ -2,8 +2,12 @@ package handlers_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -223,4 +227,27 @@ func TestExportHTML(t *testing.T) {
 		t.Fatalf("expected text/html, got %s", ct)
 	}
 	resp.Body.Close()
+}
+
+// An empty raw archive (cluster workers report aggregates) falls back to the
+// per-second series instead of a header-only file.
+func TestExportCSVEmptyArchiveFallsBackToSeries(t *testing.T) {
+	dir := t.TempDir()
+	ts := testutil.NewTestServerWith(t, testutil.Options{DataDir: dir})
+	runID := createTestRunWithSummary(t, ts, "Empty archive", 100.0, 50.0)
+
+	path := filepath.Join(dir, "runs", runID, "samples.jsonl.gz")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	f, _ := os.Create(path)
+	gzip.NewWriter(f).Close()
+	f.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL()+"/api/v1/runs/"+runID+"/export", bytes.NewBufferString(`{"format":"csv"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := ts.Do(req)
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	if !strings.HasPrefix(string(out), "timestamp,requests,failed") {
+		t.Fatalf("expected the per-second series, got %q", string(out))
+	}
 }

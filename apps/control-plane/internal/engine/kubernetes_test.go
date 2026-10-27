@@ -203,6 +203,7 @@ func TestKubernetesBackendAggregatesWorkersAndFansOutControl(t *testing.T) {
 		t.Errorf("parallelism = %v", tr["parallelism"])
 	}
 	env := f.created["Secret"]["stringData"].(map[string]any)
+	// This engine's k6 has no opensynapse output, so samples go through the log.
 	for k, want := range map[string]string{"BASE_URL": "http://shop", "OPENSYNAPSE_INSTANCES": "2", "OPENSYNAPSE_CONTROL_TOKEN": "tok", "K6_OUT": "json=/dev/stdout", "K6_NO_USAGE_REPORT": "true"} {
 		if env[k] != want {
 			t.Errorf("runner env %s = %v, want %q", k, env[k], want)

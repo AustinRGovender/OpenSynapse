@@ -52,6 +52,9 @@ type Capabilities struct {
 	Version string `json:"version"`
 	// KV reports whether xk6-kv is compiled in; RPS control needs it.
 	KV bool `json:"kv"`
+	// Ingest reports whether the opensynapse output (apps/k6-output) is
+	// compiled in; cluster workers use it to report aggregated metrics.
+	Ingest bool `json:"ingest"`
 }
 
 // Execution describes where runs execute.
@@ -80,10 +83,13 @@ type RunSpec struct {
 	// MaxDuration is the hard bound live "extend" requests cannot exceed.
 	MaxDuration time.Duration
 	RPSTarget   int
-	// ControlURL and ControlToken are set when the script includes the
-	// internal control scenario (requires xk6-kv).
+	// ControlURL is set when the script includes the internal control
+	// scenario (requires xk6-kv). ControlToken authenticates the run's k6
+	// instances to the control-state and ingest endpoints.
 	ControlURL   string
 	ControlToken string
+	// IngestURL is where cluster workers post aggregated metrics.
+	IngestURL string
 	// RawSamples, if set, opens where a gzip archive of the raw k6 samples goes.
 	RawSamples func() (io.WriteCloser, error)
 }
@@ -176,6 +182,10 @@ func (e *Engine) UseKubernetes(cfg KubernetesConfig) {
 	if cfg.MaxWorkers <= 0 {
 		cfg.MaxWorkers = 1
 	}
+	cfg.ingest = e.caps.Ingest
+	if !cfg.ingest {
+		log.Printf("k6 lacks the opensynapse output; cluster workers will stream raw samples through pod logs, which only keeps up with light load")
+	}
 	e.kube = &cfg
 }
 
@@ -209,6 +219,7 @@ func parseCapabilities(out string) Capabilities {
 		c.Version = m[1]
 	}
 	c.KV = strings.Contains(out, "k6/x/kv")
+	c.Ingest = strings.Contains(out, "opensynapse [output]")
 	return c
 }
 
@@ -257,6 +268,8 @@ func runEnv(spec RunSpec) map[string]string {
 	env["OPENSYNAPSE_INSTANCES"] = fmt.Sprint(max(1, spec.Instances))
 	if spec.ControlURL != "" {
 		env["OPENSYNAPSE_CONTROL_URL"] = spec.ControlURL
+	}
+	if spec.ControlToken != "" {
 		env["OPENSYNAPSE_CONTROL_TOKEN"] = spec.ControlToken
 	}
 	return env
@@ -324,6 +337,11 @@ func (e *Engine) StartRun(spec RunSpec, cb Callbacks) error {
 	if spec.Schedule != nil {
 		rp.targetVUs = spec.Schedule.TargetAt(0)
 		rp.sentVUs = rp.targetVUs
+	}
+	if e.kube != nil && e.kube.ingest {
+		// Cluster workers report aggregates, not samples: nothing to archive.
+		spec.RawSamples = nil
+		rp.spec.RawSamples = nil
 	}
 	if spec.RawSamples != nil {
 		if out, err := spec.RawSamples(); err != nil {
@@ -429,7 +447,7 @@ func (rp *runProcess) loop() {
 		case now := <-ticker.C:
 			rp.driveSchedule(now)
 			rp.enforceDeadline(now)
-			points := rp.agg.snapshots(now.Unix() - flushLag - 1)
+			points := rp.agg.snapshots(rp.emitUpTo(now))
 			state := rp.state(now)
 			if rp.cb.OnMetrics != nil {
 				rp.cb.OnMetrics(points, state)
@@ -439,6 +457,21 @@ func (rp *runProcess) loop() {
 			}
 		}
 	}
+}
+
+// maxIngestLag is how far behind wall-clock time per-second points may be
+// held back waiting for slow output streams.
+const maxIngestLag = 30
+
+// emitUpTo is the last second whose points are complete: a little behind the
+// clock, and never past what every instance's output has reached (cluster
+// log streams can lag), unless that lag exceeds maxIngestLag.
+func (rp *runProcess) emitUpTo(now time.Time) int64 {
+	upTo := now.Unix() - flushLag - 1
+	if wm, ok := rp.agg.watermark(); ok && wm-1 < upTo {
+		upTo = max(wm-1, now.Unix()-maxIngestLag)
+	}
+	return upTo
 }
 
 func (rp *runProcess) elapsed(now time.Time) time.Duration {

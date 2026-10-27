@@ -117,8 +117,8 @@ func BearerToken(r *http.Request) string {
 }
 
 // isPublic lists routes reachable without a token. The WebSocket
-// authenticates in its first message, the k6 control scenario with a
-// per-run token, and OAuth callbacks arrive as browser redirects.
+// authenticates in its first message, k6 (control state, cluster metrics)
+// with a per-run token, and OAuth callbacks arrive as browser redirects.
 func isPublic(r *http.Request) bool {
 	p := r.URL.Path
 	switch {
@@ -128,7 +128,8 @@ func isPublic(r *http.Request) bool {
 		return true
 	case p == "/api/v1/ws":
 		return true
-	case strings.HasPrefix(p, "/api/v1/runs/") && strings.HasSuffix(p, "/control-state"):
+	case strings.HasPrefix(p, "/api/v1/runs/") && (strings.HasSuffix(p, "/control-state") || strings.HasSuffix(p, "/ingest")):
+		// Checked against the run's own token by the handler.
 		return true
 	case p == "/api/v1/playground/oauth/callback":
 		return true

@@ -208,3 +208,26 @@ func TestBaseEnvDisablesPhoneHome(t *testing.T) {
 		t.Error("control-plane secrets must not leak into the k6 environment")
 	}
 }
+
+// Per-second points wait for the slowest instance's output, so a lagging log
+// stream does not leave seconds empty in the series.
+func TestEmitWaitsForLaggingInstances(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	rp := &runProcess{agg: newAggregator(0)}
+	line := func(ts time.Time) []byte {
+		return []byte(`{"type":"Point","metric":"http_reqs","data":{"time":"` + ts.Format(time.RFC3339Nano) + `","value":1,"tags":{}}}`)
+	}
+	rp.agg.ingest("fast", line(now.Add(-time.Second)))
+	rp.agg.ingest("slow", line(now.Add(-10*time.Second)))
+	if got, want := rp.emitUpTo(now), now.Unix()-11; got != want {
+		t.Fatalf("emitUpTo = %d, want the slow instance's watermark - 1 (%d)", got, want)
+	}
+	rp.agg.instanceDone("slow")
+	if got, want := rp.emitUpTo(now), now.Unix()-flushLag-1; got != want {
+		t.Fatalf("after the slow instance finished, emitUpTo = %d, want %d", got, want)
+	}
+	rp.agg.ingest("stuck", line(now.Add(-5*time.Minute)))
+	if got, want := rp.emitUpTo(now), now.Unix()-maxIngestLag; got != want {
+		t.Fatalf("a stuck instance may hold points back at most %ds: got %d, want %d", maxIngestLag, got, want)
+	}
+}

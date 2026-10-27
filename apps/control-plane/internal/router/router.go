@@ -111,6 +111,7 @@ func New(d Deps) http.Handler {
 	handle("POST /api/v1/runs/{id}/events", d.Runs.AddEvent)
 	handle("PATCH /api/v1/runs/{id}/control", d.Runs.Control)
 	handle("GET /api/v1/runs/{id}/control-state", d.Runs.ControlState)
+	handle("POST /api/v1/runs/{id}/ingest", d.Runs.Ingest)
 	handle("POST /api/v1/runs/{id}/stop", d.Runs.Stop)
 	handle("POST /api/v1/runs/{id}/kill", d.Runs.Kill)
 	handle("POST /api/v1/runs/{id}/export", d.Exports.ExportRun)

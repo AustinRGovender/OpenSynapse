@@ -22,10 +22,11 @@ import (
 //
 //   - puts the script in a ConfigMap and the run's environment (variables,
 //     secrets, live-control wiring) in a Secret the runners load as env;
-//   - follows every runner pod's log, where k6 writes its `--out json`
-//     samples (K6_OUT=json=/dev/stdout), and feeds them to the same
-//     aggregator a local run uses, so cluster metrics are computed from
-//     every sample rather than merged from per-worker summaries;
+//   - has each worker aggregate with the opensynapse k6 output
+//     (K6_OUT=opensynapse, apps/k6-output) and post a batch a second to the
+//     ingest endpoint; histograms in shared buckets merge exactly (see
+//     ingest.go). Runner pod logs are followed for k6's own messages, and
+//     carry raw samples only when the k6 build lacks the extension;
 //   - sends live-control changes to every runner's REST API (port 6565);
 //     k6 scales run-wide VU numbers by each runner's segment, and the RPS
 //     limit is split by OPENSYNAPSE_INSTANCES in the script.
@@ -42,6 +43,9 @@ type KubernetesConfig struct {
 	MaxWorkers int
 	// StartTimeout bounds how long runners may take to begin executing.
 	StartTimeout time.Duration
+
+	// ingest is set when the runner image's k6 has the opensynapse output.
+	ingest bool
 }
 
 // k6APIPort is where runner pods serve k6's REST API (a variable for tests).
@@ -97,7 +101,14 @@ func startKubernetes(cfg KubernetesConfig, rp *runProcess) (*kubeBackend, error)
 		k, v, _ := strings.Cut(kv, "=")
 		env[k] = v
 	}
-	env["K6_OUT"] = "json=/dev/stdout"
+	if cfg.ingest && rp.spec.IngestURL != "" {
+		// Workers aggregate per second and post batches (apps/k6-output).
+		env["K6_OUT"] = "opensynapse"
+		env["OPENSYNAPSE_INGEST_URL"] = rp.spec.IngestURL
+	} else {
+		// Fallback: every sample through the pod log (light load only).
+		env["K6_OUT"] = "json=/dev/stdout"
+	}
 	env["K6_NO_SUMMARY"] = "true"
 	env["K6_NO_COLOR"] = "true"
 
@@ -309,6 +320,8 @@ func (b *kubeBackend) isTerminated(pod string) bool {
 // already seen) if the API server closes a long-running stream.
 func (b *kubeBackend) follow(pod, container string) {
 	defer b.streams.Done()
+	// However the stream ends, this worker no longer holds back the series.
+	defer b.rp.agg.instanceDone(pod)
 	// last is the newest line's timestamp and atLast how many lines carried
 	// it. Lines from one container write share a timestamp, so a resumed
 	// stream (sinceTime has second precision) skips lines older than last

@@ -26,15 +26,25 @@ k6 with xk6-kv. The control plane needs RBAC for TestRuns, ConfigMaps, Secrets,
 Pods and `pods/log` in its namespace, and talks to the API server with a small
 REST client (`internal/kube`) rather than client-go.
 
-**Metrics.** The spec suggested Prometheus remote-write. Instead each runner
-writes k6's JSON samples to stdout (`K6_OUT=json=/dev/stdout`) and the control
-plane follows every runner pod's log, feeding the samples to the same
-aggregator a local run uses (ADR-0010). Aggregation is therefore exact: totals,
-per-second points and percentiles are computed from every sample of every
-worker, not merged from per-worker summaries. The VU gauge is tracked per
-worker and summed. Log streams that the API server closes are resumed from
-`sinceTime`, skipping lines already seen (lines from one container write share
-a timestamp, so the count at the boundary timestamp is remembered).
+**Metrics.** The spec suggested Prometheus remote-write. Instead the k6 build
+includes a small output extension, `apps/k6-output` (`K6_OUT=opensynapse`),
+that aggregates on each worker and posts one gzip batch a second to
+`POST /api/v1/runs/{id}/ingest` (authenticated with the run's token): per-second
+counts and a latency histogram in the control plane's own log buckets
+(±0.25%), per-endpoint and per-check deltas, the VU gauge and a sample of
+errors. Histograms from several workers merge by adding buckets, so the run's
+percentiles are exactly what one process seeing every sample would report.
+Batches that fail to send are kept and retried. Per-second points are emitted
+only once every running worker has reported past that second (its
+watermark), up to 30 seconds behind real time.
+
+A first version streamed every raw sample through the runner pods' logs. It
+passed the acceptance test at 80 req/s but at 30,000 req/s each worker wrote
+~490 MB of log in 20 seconds; the kubelet rotated the files faster than they
+could be read and the run reported a fifth of its requests. Pod logs are now
+only followed for k6's own messages (failure reasons) and as a fallback when
+the k6 binary lacks the extension. Cluster runs keep no raw-sample archive; CSV
+export falls back to the per-second series.
 
 **Live control.** VU, vus-max and stop changes are sent to every runner's k6
 REST API (pod IP, port 6565) in parallel; k6 scales run-wide VU numbers by each
@@ -71,16 +81,16 @@ connect by pod IP. The grafana/k6-operator chart is a dependency
 ## Consequences
 
 - Verified on kind (Kubernetes 1.34): a 4-worker run at 8 VUs sustained
-  80.3 req/s against 78.3 req/s for a single worker (2.6% apart, identical
+  79.3 req/s against 78.8 req/s for a single worker (0.6% apart, identical
   p50/p95); a live VU change reached all four workers in 2 s; an RPS limit of
-  40 held at 40.0 req/s across four workers; kill aborted within 2 s; raw
-  samples exported from the bucket; no TestRun, ConfigMap or Secret was left
-  behind.
+  40 held at 40.0 req/s across four workers; kill aborted within 3 s; a
+  30-second run at 30,780 req/s recorded 1,015,730 requests with every one in
+  the per-second series; the control plane stayed near 60 MB of memory during
+  a 24,000 req/s error flood; no TestRun, ConfigMap or Secret was left behind.
+- S3 uploads use 16 MiB parts: with an unknown length the client otherwise
+  buffers ~537 MiB parts, which killed the 512 MiB control-plane pod.
 - Runner pods need network access to the control plane's Service (live
   control) and the control plane to the runners' pod IPs; restrictive
   NetworkPolicies must allow both.
-- Following pod logs puts metric traffic through the API server. That is fine
-  for the worker counts and sample rates OpenSynapse targets; very large tests
-  may need a different transport later.
 - Kubernetes 1.35+ needs cgroup v2 nodes; this is a cluster requirement, not
   an OpenSynapse one.

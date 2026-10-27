@@ -821,6 +821,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{id}/ingest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aggregated metrics from a cluster run's k6 workers (per-run token; gzip accepted) */
+        post: operations["postRunsIdIngest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{id}/kill": {
         parameters: {
             query?: never;
@@ -1391,6 +1408,49 @@ export interface components {
             approximated: string[];
             imported: string[];
             unsupported: string[];
+        };
+        IngestBatch: {
+            checks?: components["schemas"]["IngestCheck"][];
+            endpoints?: components["schemas"]["IngestEndpoint"][];
+            errors?: components["schemas"]["RunError"][];
+            final?: boolean;
+            instance: string;
+            seconds?: components["schemas"]["IngestSecond"][];
+            /** Format: date-time */
+            through: string;
+        };
+        IngestCheck: {
+            fails?: number;
+            group: string;
+            name: string;
+            passes?: number;
+        };
+        IngestEndpoint: {
+            durations?: components["schemas"]["IngestHist"] | null;
+            failed?: number;
+            method: string;
+            name: string;
+        };
+        IngestHist: {
+            b: {
+                [key: string]: number;
+            };
+            max: number;
+            min: number;
+            n: number;
+            s: number;
+        };
+        IngestSecond: {
+            bytes_received?: number;
+            bytes_sent?: number;
+            checks_failed?: number;
+            checks_passed?: number;
+            durations?: components["schemas"]["IngestHist"] | null;
+            failed?: number;
+            iterations?: number;
+            requests?: number;
+            t: number;
+            vus?: number | null;
         };
         ItemsAPIToken: {
             items: components["schemas"]["APIToken"][];
@@ -3895,6 +3955,39 @@ export interface operations {
                 content: {
                     "application/octet-stream": string;
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    postRunsIdIngest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngestBatch"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

@@ -22,7 +22,10 @@ ARG K6_RELEASE=v1.8.2
 ARG XK6_KV_VERSION=v1.3.0
 RUN apk add --no-cache git
 RUN go install go.k6.io/xk6/cmd/xk6@${XK6_VERSION}
-RUN xk6 build ${K6_RELEASE} --with github.com/oleiade/xk6-kv@${XK6_KV_VERSION} --output /k6
+# The opensynapse output aggregates samples on cluster workers and posts them
+# to the control plane (apps/k6-output, docs/decisions/0012-cluster-mode.md).
+COPY apps/k6-output/ /src/k6-output/
+RUN xk6 build ${K6_RELEASE}       --with github.com/oleiade/xk6-kv@${XK6_KV_VERSION}       --with github.com/opensynapse/opensynapse/apps/k6-output=/src/k6-output       --output /k6
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates chromium nss freetype harfbuzz font-noto

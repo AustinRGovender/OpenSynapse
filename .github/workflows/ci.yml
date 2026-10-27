@@ -32,6 +32,10 @@ jobs:
       - name: Vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+      - name: Test the k6 output extension
+        working-directory: apps/k6-output
+        run: go test ./... -count=1
+
   go-postgres:
     name: Go tests on Postgres (cluster-mode database)
     runs-on: ubuntu-latest
@@ -166,6 +170,10 @@ jobs:
           cat k6-version.txt
           grep -q "xk6-kv" k6-version.txt || {
             echo "::error::k6 binary in control-plane image is missing the xk6-kv extension (see docs/decisions/0007-k6-xk6-kv-bundled-in-control-plane-image.md)"
+            exit 1
+          }
+          grep -q "opensynapse \[output\]" k6-version.txt || {
+            echo "::error::k6 binary in control-plane image is missing the opensynapse output (see docs/decisions/0012-cluster-mode.md)"
             exit 1
           }
 

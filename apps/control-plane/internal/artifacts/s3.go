@@ -12,6 +12,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// uploadPartSize bounds the memory one artifact upload buffers.
+const uploadPartSize = 16 << 20
+
 // S3 stores artifacts in an S3-compatible bucket (MinIO in the Helm chart).
 type S3 struct {
 	client *minio.Client
@@ -79,7 +82,10 @@ func (s *S3) Create(ctx context.Context, key string) (io.WriteCloser, error) {
 	pr, pw := io.Pipe()
 	w := &s3Writer{pw: pw, done: make(chan error, 1)}
 	go func() {
-		_, err := s.client.PutObject(context.WithoutCancel(ctx), s.bucket, key, pr, -1, minio.PutObjectOptions{ContentType: "application/gzip"})
+		// With an unknown length the client would size parts for a 5 TiB
+		// object (~537 MiB, buffered in memory); 16 MiB parts allow archives
+		// up to ~160 GiB in a fraction of the memory.
+		_, err := s.client.PutObject(context.WithoutCancel(ctx), s.bucket, key, pr, -1, minio.PutObjectOptions{ContentType: "application/gzip", PartSize: uploadPartSize})
 		pr.CloseWithError(err)
 		w.done <- err
 	}()

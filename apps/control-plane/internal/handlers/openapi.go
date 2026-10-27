@@ -235,6 +235,7 @@ var Catalogue = []Op{
 	{"POST", "/api/v1/runs/{id}/events", "Add a note to the timeline", "Runs", noteRequest{}, db.RunEvent{}, 201, "", nil, false},
 	{"PATCH", "/api/v1/runs/{id}/control", "Change VUs, RPS limit, duration or pause", "Runs", controlRequest{}, engine.LiveState{}, 0, "", nil, false},
 	{"GET", "/api/v1/runs/{id}/control-state", "Live-control state for the run's k6 control scenario (per-run token)", "Runs", nil, engine.ControlState{}, 0, "", nil, true},
+	{"POST", "/api/v1/runs/{id}/ingest", "Aggregated metrics from a cluster run's k6 workers (per-run token; gzip accepted)", "Runs", engine.IngestBatch{}, nil, 204, "", nil, true},
 	{"POST", "/api/v1/runs/{id}/stop", "Stop gracefully", "Runs", nil, statusResponse{}, 0, "", nil, false},
 	{"POST", "/api/v1/runs/{id}/kill", "Kill immediately", "Runs", nil, statusResponse{}, 0, "", nil, false},
 	{"POST", "/api/v1/runs/{id}/export", "Export as json, csv (raw samples), html or pdf", "Runs", exportRequestDoc{}, nil, 0, "application/octet-stream", nil, false},
