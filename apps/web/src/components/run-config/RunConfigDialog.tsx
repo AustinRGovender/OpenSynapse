@@ -24,6 +24,7 @@ export function RunConfigDialog({
   planScenarioProperties,
   defaultEnvironmentId,
   starting,
+  requiredVariables = [],
 }: {
   open: boolean
   onClose: () => void
@@ -31,6 +32,8 @@ export function RunConfigDialog({
   planScenarioProperties: Record<string, unknown> | null
   defaultEnvironmentId: string | null
   starting?: boolean
+  /** ${VARIABLES} the plan uses; the dialog warns about ones the environment lacks. */
+  requiredVariables?: string[]
 }) {
   const kv = useUIStore((s) => s.system?.k6.kv ?? false)
   const execution = useUIStore((s) => s.system?.execution)
@@ -73,6 +76,8 @@ export function RunConfigDialog({
   }, [choice, vus, seconds, rps, template, vuBased])
   const parameters = workers > 1 ? { ...profileParameters, worker_count: workers } : profileParameters
 
+  const selectedEnv = envs.find((e) => e.id === envId)
+  const missing = requiredVariables.filter((v) => !(selectedEnv && v in selectedEnv.variables))
   const summary = choice.kind === 'plan' ? plan.text : choice.kind === 'custom' ? `${vus} VUs for ${formatSeconds(seconds)}` : (templateProfile?.text ?? '')
   // Only VU-based plans can take another profile; arrival-rate and iteration
   // executors are run as designed.
@@ -113,6 +118,13 @@ export function RunConfigDialog({
             <TextInput type="number" min={0} value={rps} disabled={!vuBased || !kv} onChange={(e) => setRps(e.target.value)} placeholder="No limit" />
           </Field>
         </div>
+
+        {missing.length > 0 && (
+          <p role="alert" className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            {selectedEnv ? `“${selectedEnv.name}” does not set` : 'No environment is selected, so nothing sets'}{' '}
+            {missing.map((v, i) => <span key={v}>{i > 0 && ', '}<code>{'${' + v + '}'}</code></span>)}. Requests that use {missing.length === 1 ? 'it' : 'them'} will fail.
+          </p>
+        )}
 
         <div>
           <p className="mb-2 text-xs font-medium text-slate-400">Load profile</p>

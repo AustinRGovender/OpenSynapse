@@ -4,6 +4,7 @@ import { canEdit, useAuthStore } from '../../stores/auth-store'
 import { findNode, usePlanStore } from '../../stores/plan-store'
 import { useToast } from '../../stores/ui-store'
 import { navigate } from '../../utils/navigate'
+import { requiredVariables } from '../../utils/variables'
 import { FragmentLibrary } from '../fragments/FragmentLibrary'
 import { RunConfigDialog, type RunRequest } from '../run-config/RunConfigDialog'
 import { Badge, Button, EmptyState, Spinner } from '../ui/primitives'
@@ -29,6 +30,8 @@ export function PlanBuilder({ planId }: { planId: string }) {
   useEffect(() => {
     loadPlan(planId)
   }, [planId, loadPlan])
+
+  const variables = useMemo(() => (plan ? requiredVariables(plan.root) : []), [plan])
 
   const scenarioProps = useMemo(() => {
     const scenario = plan?.root.children.find((c) => c.type === 'scenario' && c.enabled)
@@ -156,6 +159,7 @@ export function PlanBuilder({ planId }: { planId: string }) {
         planScenarioProperties={scenarioProps}
         defaultEnvironmentId={plan.default_environment_id ?? null}
         starting={starting}
+        requiredVariables={variables}
       />
     </div>
   )

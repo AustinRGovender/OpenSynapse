@@ -62,6 +62,16 @@ describe('RunConfigDialog', () => {
     expect(screen.queryByRole('spinbutton', { name: 'Workers' })).not.toBeInTheDocument()
   })
 
+  it('warns about variables the selected environment does not set', async () => {
+    render(<RunConfigDialog open onClose={() => {}} onConfirm={() => {}} planScenarioProperties={null} defaultEnvironmentId={null} requiredVariables={['ECOMMERCE_API', 'ECHO_API', 'TOKEN']} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('No environment is selected')
+    await screen.findByRole('option', { name: 'Test APIs (Docker)' })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Environment' }), 'env-docker')
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('does not set ${TOKEN}')
+    expect(alert).not.toHaveTextContent('ECOMMERCE_API')
+  })
+
   it('locks arrival-rate plans to their own profile', () => {
     render(<RunConfigDialog open onClose={() => {}} onConfirm={() => {}} planScenarioProperties={{ executor: 'constant-arrival-rate', rate: 20, duration: '1m' }} defaultEnvironmentId={null} />)
     expect(screen.getByRole('button', { name: /^Custom/ })).toBeDisabled()

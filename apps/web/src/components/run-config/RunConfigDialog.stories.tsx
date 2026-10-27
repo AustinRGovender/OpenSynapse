@@ -32,6 +32,9 @@ export const ArrivalRatePlan: Story = {
 
 export const Starting: Story = { args: { starting: true } }
 
+/** The plan uses variables the chosen environment does not define. */
+export const MissingVariables: Story = { args: { defaultEnvironmentId: null, requiredVariables: ['ECHO_API', 'AUTH_TOKEN'] } }
+
 /** Cluster mode: runs can be spread over several k6 workers. */
 export const ClusterMode: Story = {
   render: (args) => {

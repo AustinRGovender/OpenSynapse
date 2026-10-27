@@ -3,6 +3,7 @@ import { parseDurationToSeconds } from './duration'
 import { formatBytes, formatMs, formatSeconds } from './format'
 import { clampInt } from './number'
 import { describeProfile } from './profile'
+import { requiredVariables } from './variables'
 
 describe('parseDurationToSeconds', () => {
   it.each([
@@ -50,5 +51,20 @@ describe('clampInt', () => {
     expect(clampInt('0', 1, 50, 5)).toBe(1)
     expect(clampInt('', 1, 50, 5)).toBe(5)
     expect(clampInt('abc', 1, 50, 5)).toBe(5)
+  })
+})
+
+describe('requiredVariables', () => {
+  it('lists variables used by enabled nodes that the plan does not set itself', () => {
+    const node = (type: string, properties: object, children: object[] = [], enabled = true) => ({ id: type, type, name: type, enabled, properties, children })
+    const root = node('plan', {}, [
+      node('scenario', {}, [
+        node('http', { url: '${BASE_URL}/login', headers: [{ key: 'Authorization', value: 'Bearer ${TOKEN}' }] }),
+        node('code-block', { code: "__vars.TOKEN = res.json('token'); __vars['USER'] = 'x'" }),
+        node('http', { url: '${OTHER}/x' }, [], false),
+        node('http', { url: '${USER}/${BASE_URL}' }),
+      ]),
+    ])
+    expect(requiredVariables(root as never)).toEqual(['BASE_URL'])
   })
 })
