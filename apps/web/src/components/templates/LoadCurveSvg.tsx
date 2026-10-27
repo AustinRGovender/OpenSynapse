@@ -11,7 +11,7 @@ export function LoadCurveSvg({ path, name }: { path: string; name: string }) {
         .${styleId} {
           stroke-dasharray: 600;
           stroke-dashoffset: 600;
-          animation: ${styleId} 4s ease-in-out infinite;
+          animation: ${styleId} 2s ease-out 1 forwards;
         }
         @media (prefers-reduced-motion: reduce) {
           .${styleId} { animation: none; stroke-dashoffset: 0; }

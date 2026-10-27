@@ -31,6 +31,11 @@ describe('describeProfile', () => {
     expect(describeProfile({ executor: 'constant-arrival-rate', rate: 50, duration: '1m' }).vuBased).toBe(false)
   })
 
+  it('uses the singular for one', () => {
+    expect(describeProfile({ executor: 'constant-vus', vus: 1, duration: '30s' }).text).toBe('1 VU for 30s')
+    expect(describeProfile({ executor: 'constant-arrival-rate', rate: 1, time_unit: '1s', duration: '1h' }).text).toBe('1 iteration per 1s for 1h')
+  })
+
   it('handles a plan without a scenario', () => {
     expect(describeProfile(null).text).toMatch(/no scenario/)
   })

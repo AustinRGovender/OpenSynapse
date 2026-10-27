@@ -315,7 +315,7 @@ function UsersTab() {
     <div className="max-w-3xl">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm text-slate-400">Viewers can see everything; editors can also change plans and run tests; admins can also manage users and settings.</p>
-        <Button variant="primary" onClick={() => setForm({ email: '', display_name: '', password: '', role: 'editor' })}>Add user</Button>
+        <Button variant="primary" className="shrink-0" onClick={() => setForm({ email: '', display_name: '', password: '', role: 'editor' })}>Add user</Button>
       </div>
       {users === null ? <Spinner /> : (
         <div className="divide-y divide-slate-800 rounded-lg border border-slate-800">

@@ -127,7 +127,7 @@ func TestPlanWithoutScenarioIsSynthesizedWhenManaged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	if res.Profile == nil || res.Profile.Peak() != 2 || !strings.Contains(res.Script, "http.get('http://x/')") {
+	if res.Profile == nil || res.Profile.Peak() != 2 || !strings.Contains(res.Script, "http.get('http://x/', params_") {
 		t.Fatalf("loose nodes should run in a synthesized managed scenario:\n%s", res.Script)
 	}
 }

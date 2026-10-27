@@ -638,10 +638,16 @@ func (c *compiler) emitHTTP(node db.Node, depth int) error {
 
 	expected := expectedStatuses(node.Children)
 
-	// Build params object if we have headers, timeout, redirects config, or expected statuses.
-	hasParams := len(props.Headers) > 0 || props.Timeout != "" || props.FollowRedirects != nil || len(expected) > 0
+	// Every request is tagged with its node's name, so results are grouped as
+	// the plan names them and URLs with variables (/items/${id}) stay one
+	// endpoint instead of one per value.
+	name := strings.TrimSpace(node.Name)
+	hasParams := name != "" || len(props.Headers) > 0 || props.Timeout != "" || props.FollowRedirects != nil || len(expected) > 0
 	if hasParams {
 		df.WriteString(fmt.Sprintf("%slet params_%s = {\n", ind, id))
+		if name != "" {
+			df.WriteString(fmt.Sprintf("%s  tags: { name: '%s' },\n", ind, sanitizeJSString(name)))
+		}
 		if len(props.Headers) > 0 {
 			df.WriteString(fmt.Sprintf("%s  headers: {\n", ind))
 			for _, h := range props.Headers {

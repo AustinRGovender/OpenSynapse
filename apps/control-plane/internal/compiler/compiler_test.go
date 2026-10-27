@@ -230,7 +230,7 @@ func TestEmitHTTPGet(t *testing.T) {
 		t.Fatalf("CompileNode() error: %v", err)
 	}
 
-	if !strings.Contains(script, "http.get('https://example.com/api/items')") {
+	if !strings.Contains(script, "http.get('https://example.com/api/items', params_") {
 		t.Error("expected http.get call with URL")
 	}
 	if !strings.Contains(script, "import http from 'k6/http'") {
