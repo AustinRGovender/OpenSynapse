@@ -1,306 +1,204 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useRunStore, type RunWithPlanName, type RunListFilters } from '../stores/run-store'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Plan, Run } from '@opensynapse/api-client'
+import { api, errorMessage, unwrap } from '../api'
+import { Button, EmptyState, PageHeader, Select, Spinner, StatusBadge, TextInput } from '../components/ui/primitives'
+import { useToast } from '../stores/ui-store'
+import { formatMs, formatNumber, formatSeconds, runDuration } from '../utils/format'
+import { navigate } from '../utils/navigate'
 
-type SortField = 'plan_name' | 'started_at' | 'duration' | 'status' | 'peakVUs' | 'p95' | 'errorRate'
-type SortDir = 'asc' | 'desc'
+type SortKey = 'started' | 'plan' | 'duration' | 'status' | 'vus' | 'p95' | 'errors'
 
-const statusOptions = ['all', 'running', 'completed', 'failed', 'cancelled'] as const
+const COLUMNS: [SortKey, string, boolean][] = [
+  ['plan', 'Plan', false],
+  ['started', 'Started', false],
+  ['duration', 'Duration', true],
+  ['status', 'Status', false],
+  ['vus', 'Peak VUs', true],
+  ['p95', 'p95', true],
+  ['errors', 'Error rate', true],
+]
 
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    pending: 'bg-yellow-500/20 text-yellow-400',
-    running: 'bg-yellow-500/20 text-yellow-400',
-    completed: 'bg-green-500/20 text-green-400',
-    failed: 'bg-red-500/20 text-red-400',
-    cancelled: 'bg-slate-500/20 text-slate-400',
+function sortValue(r: Run, key: SortKey): number | string {
+  switch (key) {
+    case 'plan':
+      return r.plan_name.toLowerCase()
+    case 'started':
+      return r.started_at ?? r.created_at
+    case 'duration':
+      return runDuration(r.started_at, r.ended_at)
+    case 'status':
+      return r.status
+    case 'vus':
+      return r.summary?.peak_vus ?? 0
+    case 'p95':
+      return r.summary?.p95_ms ?? 0
+    case 'errors':
+      return r.summary?.error_rate ?? 0
   }
-  return map[status] || 'bg-slate-500/20 text-slate-400'
 }
 
-function getDuration(run: RunWithPlanName): number {
-  if (!run.started_at) return 0
-  const start = new Date(run.started_at).getTime()
-  const end = run.ended_at ? new Date(run.ended_at).getTime() : Date.now()
-  return end - start
-}
+export function RunsListPage() {
+  const toast = useToast()
+  const [runs, setRuns] = useState<Run[] | null>(null)
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [status, setStatus] = useState('all')
+  const [planId, setPlanId] = useState('')
+  const [since, setSince] = useState('')
+  const [until, setUntil] = useState('')
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'started', desc: true })
+  const [selected, setSelected] = useState<string[]>([])
 
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
-  if (m === 0) return `${s}s`
-  return `${m}m ${s}s`
-}
+  const query = useMemo(() => {
+    const q: Record<string, string> = { limit: '50' }
+    if (status !== 'all') q.status = status
+    if (planId) q.plan_id = planId
+    if (since) q.since = new Date(since).toISOString()
+    if (until) q.until = new Date(`${until}T23:59:59`).toISOString()
+    return q
+  }, [status, planId, since, until])
 
-function sortRuns(runs: RunWithPlanName[], field: SortField, dir: SortDir): RunWithPlanName[] {
-  const sorted = [...runs]
-  sorted.sort((a, b) => {
-    let cmp = 0
-    switch (field) {
-      case 'plan_name':
-        cmp = (a.plan_name ?? a.plan_id).localeCompare(b.plan_name ?? b.plan_id)
-        break
-      case 'started_at':
-        cmp = (a.started_at ?? '').localeCompare(b.started_at ?? '')
-        break
-      case 'duration':
-        cmp = getDuration(a) - getDuration(b)
-        break
-      case 'status':
-        cmp = a.status.localeCompare(b.status)
-        break
-      case 'peakVUs':
-        cmp = (a.summary?.peakVUs ?? 0) - (b.summary?.peakVUs ?? 0)
-        break
-      case 'p95':
-        cmp = (a.summary?.p95 ?? 0) - (b.summary?.p95 ?? 0)
-        break
-      case 'errorRate':
-        cmp = (a.summary?.errorRate ?? 0) - (b.summary?.errorRate ?? 0)
-        break
-    }
-    return dir === 'asc' ? cmp : -cmp
-  })
-  return sorted
-}
-
-interface RunsListPageProps {
-  onBack: () => void
-}
-
-export function RunsListPage({ onBack }: RunsListPageProps) {
-  const {
-    runsList,
-    runsListLoading,
-    runsListHasMore,
-    loadRuns,
-    loadMoreRuns,
-  } = useRunStore()
-
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [sortField, setSortField] = useState<SortField>('started_at')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-
-  const filters: RunListFilters = {
-    status: statusFilter,
-    from: dateFrom || undefined,
-    to: dateTo || undefined,
-  }
-
-  useEffect(() => {
-    loadRuns(filters)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, dateFrom, dateTo])
-
-  const handleSort = useCallback(
-    (field: SortField) => {
-      if (sortField === field) {
-        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-      } else {
-        setSortField(field)
-        setSortDir('desc')
-      }
-    },
-    [sortField],
+  const load = useCallback(
+    (more?: string) =>
+      unwrap(api.GET('/api/v1/runs', { params: { query: more ? { ...query, cursor: more } : query } }))
+        .then((res) => {
+          setRuns((prev) => (more && prev ? [...prev, ...res.items] : res.items))
+          setCursor(res.next_cursor ?? null)
+        })
+        .catch((e) => {
+          toast(`Could not load runs: ${errorMessage(e)}`, 'error')
+          setRuns([])
+        }),
+    [query, toast],
   )
 
-  const toggleSelect = useCallback((id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        if (next.size >= 5) return prev
-        next.add(id)
-      }
-      return next
-    })
+  useEffect(() => {
+    load()
+  }, [load])
+
+  useEffect(() => {
+    unwrap(api.GET('/api/v1/plans', { params: { query: { limit: '500' } } }))
+      .then((r) => setPlans(r.items))
+      .catch(() => {})
   }, [])
 
-  const handleCompare = useCallback(() => {
-    const ids = Array.from(selected).join(',')
-    window.location.hash = `#/compare?ids=${ids}`
-  }, [selected])
+  // Keep running runs fresh without a full reload.
+  const anyRunning = runs?.some((r) => r.status === 'running' || r.status === 'queued')
+  useEffect(() => {
+    if (!anyRunning) return
+    const id = setInterval(() => load(), 5000)
+    return () => clearInterval(id)
+  }, [anyRunning, load])
 
-  const sortedRuns = sortRuns(runsList, sortField, sortDir)
-  const canCompare = selected.size >= 2 && selected.size <= 5
+  const sorted = useMemo(() => {
+    if (!runs) return []
+    const out = [...runs]
+    out.sort((a, b) => {
+      const x = sortValue(a, sort.key)
+      const y = sortValue(b, sort.key)
+      const c = x < y ? -1 : x > y ? 1 : 0
+      return sort.desc ? -c : c
+    })
+    return out
+  }, [runs, sort])
 
-  const sortIndicator = (field: SortField) => {
-    if (sortField !== field) return ''
-    return sortDir === 'asc' ? ' \u2191' : ' \u2193'
+  function toggle(id: string) {
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length >= 5 ? s : [...s, id]))
   }
 
-  const headerClass =
-    'px-3 py-2 text-left text-xs font-medium text-slate-500 cursor-pointer select-none hover:text-slate-300'
+  const th = 'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-slate-500'
+  const td = 'px-3 py-2 text-xs text-slate-300'
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="rounded px-2 py-1 text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-          >
-            &larr; Home
-          </button>
-          <div className="h-4 w-px bg-slate-800" />
-          <h1 className="text-lg font-semibold tracking-tight">Runs</h1>
-        </div>
-        <button
-          disabled={!canCompare}
-          onClick={handleCompare}
-          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Compare Selected ({selected.size})
-        </button>
-      </header>
+    <div className="mx-auto max-w-6xl px-6 py-8">
+      <PageHeader
+        title="Runs"
+        description="Every test run with its outcome. Tick two to five runs to compare them."
+        actions={
+          <Button variant="primary" disabled={selected.length < 2} onClick={() => navigate(`#/compare?ids=${selected.join(',')}`)}>
+            Compare {selected.length > 0 ? `(${selected.length})` : ''}
+          </Button>
+        }
+      />
 
-      <main className="mx-auto max-w-6xl px-6 py-6">
-        {/* Filter bar */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-teal-500"
-            >
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">From</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-teal-500"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">To</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-teal-500"
-            />
-          </div>
-        </div>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <label className="text-xs text-slate-400">
+          Status
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 w-36">
+            <option value="all">All</option>
+            <option value="running">Running</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="aborted">Aborted</option>
+          </Select>
+        </label>
+        <label className="text-xs text-slate-400">
+          Plan
+          <Select value={planId} onChange={(e) => setPlanId(e.target.value)} className="mt-1 w-56">
+            <option value="">All plans</option>
+            {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </label>
+        <label className="text-xs text-slate-400">
+          From
+          <TextInput type="date" value={since} onChange={(e) => setSince(e.target.value)} className="mt-1 w-40" />
+        </label>
+        <label className="text-xs text-slate-400">
+          To
+          <TextInput type="date" value={until} onChange={(e) => setUntil(e.target.value)} className="mt-1 w-40" />
+        </label>
+        {(status !== 'all' || planId || since || until) && (
+          <Button size="sm" variant="ghost" onClick={() => { setStatus('all'); setPlanId(''); setSince(''); setUntil('') }}>Clear filters</Button>
+        )}
+      </div>
 
-        {/* Table */}
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-800">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-800 bg-slate-900">
+      {runs === null ? (
+        <Spinner />
+      ) : sorted.length === 0 ? (
+        <EmptyState title="No runs match">Open a plan and press Run to create one.</EmptyState>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-800">
+          <table className="w-full">
+            <thead className="bg-slate-900">
               <tr>
-                <th className="w-10 px-3 py-2">
-                  {/* Checkbox column header */}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('plan_name')}>
-                  Plan Name{sortIndicator('plan_name')}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('started_at')}>
-                  Started{sortIndicator('started_at')}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('duration')}>
-                  Duration{sortIndicator('duration')}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('status')}>
-                  Status{sortIndicator('status')}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('peakVUs')}>
-                  Peak VUs{sortIndicator('peakVUs')}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('p95')}>
-                  p95{sortIndicator('p95')}
-                </th>
-                <th className={headerClass} onClick={() => handleSort('errorRate')}>
-                  Error Rate{sortIndicator('errorRate')}
-                </th>
+                <th className={`${th} w-8`}><span className="sr-only">Select</span></th>
+                {COLUMNS.map(([key, label, right]) => (
+                  <th key={key} className={`${th} ${right ? 'text-right' : ''}`}>
+                    <button type="button" onClick={() => setSort((s) => ({ key, desc: s.key === key ? !s.desc : true }))} className="uppercase hover:text-slate-300">
+                      {label} {sort.key === key ? (sort.desc ? '↓' : '↑') : ''}
+                    </button>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {sortedRuns.length === 0 && !runsListLoading && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                    No runs found.
+              {sorted.map((r) => (
+                <tr key={r.id} className="cursor-pointer border-t border-slate-800 hover:bg-slate-900" onClick={() => navigate(`#/runs/${r.id}`)}>
+                  <td className={td} onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" aria-label={`Select run ${r.id.slice(0, 8)}`} checked={selected.includes(r.id)} disabled={!selected.includes(r.id) && selected.length >= 5} onChange={() => toggle(r.id)} className="accent-teal-500" />
                   </td>
-                </tr>
-              )}
-              {sortedRuns.map((run) => (
-                <tr
-                  key={run.id}
-                  className="cursor-pointer border-b border-slate-800/50 hover:bg-slate-900/80"
-                  onClick={() => (window.location.hash = `#/runs/${run.id}`)}
-                >
-                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(run.id)}
-                      onChange={() => toggleSelect(run.id)}
-                      className="h-3.5 w-3.5 cursor-pointer rounded border-slate-600 bg-slate-800 accent-teal-500"
-                    />
+                  <td className={td}>
+                    <span className="text-slate-100">{r.plan_name || 'Deleted plan'}</span>
+                    <span className="ml-2 font-mono text-[10px] text-slate-500">{r.id.slice(0, 8)}</span>
+                    {r.created_by_name && <span className="ml-2 text-[10px] text-slate-500">by {r.created_by_name}</span>}
                   </td>
-                  <td className="px-3 py-2 text-sm text-slate-200">
-                    {run.plan_name ?? run.plan_id.slice(0, 8)}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-slate-400">
-                    {run.started_at
-                      ? new Date(run.started_at).toLocaleString()
-                      : '--'}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-400">
-                    {formatDuration(getDuration(run))}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge(run.status)}`}
-                    >
-                      {run.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-300">
-                    {run.summary?.peakVUs ?? '--'}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-300">
-                    {run.summary?.p95 != null ? `${run.summary.p95.toFixed(1)} ms` : '--'}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-300">
-                    {run.summary?.errorRate != null
-                      ? `${run.summary.errorRate.toFixed(2)}%`
-                      : '--'}
-                  </td>
+                  <td className={`${td} whitespace-nowrap`}>{r.started_at ? new Date(r.started_at).toLocaleString() : '—'}</td>
+                  <td className={`${td} text-right tabular-nums`}>{formatSeconds(runDuration(r.started_at, r.ended_at))}</td>
+                  <td className={td}><StatusBadge status={r.status} /></td>
+                  <td className={`${td} text-right tabular-nums`}>{r.summary ? formatNumber(r.summary.peak_vus) : '—'}</td>
+                  <td className={`${td} text-right tabular-nums`}>{r.summary ? formatMs(r.summary.p95_ms) : '—'}</td>
+                  <td className={`${td} text-right tabular-nums ${r.summary && r.summary.error_rate > 0 ? 'text-red-400' : ''}`}>{r.summary ? `${r.summary.error_rate.toFixed(2)}%` : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        {/* Load more */}
-        {runsListHasMore && (
-          <div className="mt-4 flex justify-center">
-            <button
-              onClick={() => loadMoreRuns(filters)}
-              disabled={runsListLoading}
-              className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-            >
-              {runsListLoading ? 'Loading...' : 'Load More'}
-            </button>
-          </div>
-        )}
-
-        {runsListLoading && runsList.length === 0 && (
-          <div className="mt-8 text-center text-sm text-slate-500">Loading runs...</div>
-        )}
-      </main>
+      )}
+      {cursor && (
+        <div className="mt-4 flex justify-center">
+          <Button onClick={() => load(cursor)}>Load more</Button>
+        </div>
+      )}
     </div>
   )
 }

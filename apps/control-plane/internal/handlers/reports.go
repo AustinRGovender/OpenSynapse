@@ -22,7 +22,7 @@ func NewReportHandlers(reports *db.ReportStore, runs *db.RunStore) *ReportHandle
 // Compare computes a comparison between multiple runs.
 type compareRequest struct {
 	RunIDs  []string `json:"run_ids"`
-	Metrics []string `json:"metrics"`
+	Metrics []string `json:"metrics,omitempty"`
 }
 
 type comparisonResult struct {

@@ -58,7 +58,7 @@ func (h *AuthHandlers) Session(w http.ResponseWriter, r *http.Request) {
 type credentials struct {
 	Email       string `json:"email"`
 	Password    string `json:"password"`
-	DisplayName string `json:"display_name"`
+	DisplayName string `json:"display_name,omitempty"`
 }
 
 func validEmail(s string) bool {
@@ -238,9 +238,9 @@ func (h *AuthHandlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 type userRequest struct {
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Password    string `json:"password"`
+	Email       string `json:"email,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	Password    string `json:"password,omitempty"`
 	Role        string `json:"role"`
 }
 

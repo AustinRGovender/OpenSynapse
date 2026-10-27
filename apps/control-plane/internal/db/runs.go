@@ -18,11 +18,11 @@ type RunStage struct {
 // RunParameters are the per-run overrides chosen in the Run dialog. Zero
 // values mean "use the plan's scenario settings".
 type RunParameters struct {
-	VUsTarget       int        `json:"vus_target"`
+	VUsTarget       int        `json:"vus_target,omitempty"`
 	RPSTarget       int        `json:"rps_target,omitempty"`
-	DurationSeconds int        `json:"duration_seconds"`
+	DurationSeconds int        `json:"duration_seconds,omitempty"`
 	Stages          []RunStage `json:"stages,omitempty"`
-	WorkerCount     int        `json:"worker_count"`
+	WorkerCount     int        `json:"worker_count,omitempty"`
 }
 
 // RunSummary is computed from the run's raw samples when the run ends.

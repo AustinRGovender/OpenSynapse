@@ -100,10 +100,10 @@ func (h *AIHandlers) TestConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 type analyseRequest struct {
-	RunID    string   `json:"run_id"`
-	RunIDs   []string `json:"run_ids"`
-	ReportID string   `json:"report_id"`
-	Question string   `json:"question"`
+	RunID    string   `json:"run_id,omitempty"`
+	RunIDs   []string `json:"run_ids,omitempty"`
+	ReportID string   `json:"report_id,omitempty"`
+	Question string   `json:"question,omitempty"`
 }
 
 // resolve returns the runs to describe and the default question.

@@ -1,35 +1,17 @@
 interface MetricCardProps {
   label: string
   value: string | number
-  trend?: 'up' | 'down' | 'stable'
-  trendLabel?: string
+  sub?: string
   alert?: boolean
-  frozen?: boolean
 }
 
-export function MetricCard({ label, value, trend, trendLabel, alert, frozen }: MetricCardProps) {
-  const trendColor =
-    trend === 'up'
-      ? 'text-red-400'
-      : trend === 'down'
-        ? 'text-teal-400'
-        : 'text-slate-500'
-
-  const borderColor = alert ? 'border-red-500/50' : 'border-slate-800'
-  const valueColor = frozen ? 'text-slate-300' : 'text-slate-100'
-
+/** One headline number on the run dashboard. */
+export function MetricCard({ label, value, sub, alert = false }: MetricCardProps) {
   return (
-    <div
-      className={`rounded-lg border ${borderColor} bg-slate-900 px-4 py-3`}
-    >
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={`mt-1 text-3xl font-semibold ${valueColor}`}>{value}</p>
-      {trend && trendLabel && (
-        <p className={`mt-1 text-xs ${trendColor}`}>
-          {trend === 'up' ? '\u2191' : trend === 'down' ? '\u2193' : '\u2022'}{' '}
-          {trendLabel}
-        </p>
-      )}
+    <div className={`rounded-lg border px-3 py-2.5 ${alert ? 'border-red-500/40 bg-red-500/5' : 'border-slate-800 bg-slate-900'}`}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-0.5 text-xl font-semibold tabular-nums ${alert ? 'text-red-400' : 'text-slate-100'}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-500">{sub}</p>}
     </div>
   )
 }

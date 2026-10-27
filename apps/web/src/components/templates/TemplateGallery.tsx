@@ -1,165 +1,95 @@
-import { useState } from 'react'
-import { OpenSynapseClient, type Node } from '@opensynapse/api-client'
-import { type TemplateConfig, TEMPLATES } from './template-data'
-import { LoadCurveSvg } from './LoadCurveSvg'
+import { useRef, useState, type KeyboardEvent } from 'react'
+import { api, errorMessage, unwrap } from '../../api'
+import { useToast } from '../../stores/ui-store'
 import { navigate } from '../../utils/navigate'
-
-const client = new OpenSynapseClient('/api/v1')
+import { Modal } from '../ui/primitives'
+import { LoadCurveSvg } from './LoadCurveSvg'
+import { buildPlanRoot, type TemplateConfig, TEMPLATES } from './template-data'
 
 interface TemplateGalleryProps {
   open: boolean
   onClose: () => void
+  /** Environment new plans start with (the bundled test APIs by default). */
+  defaultEnvironmentId?: string | null
 }
 
-function buildPlanRoot(template: TemplateConfig): Node {
-  return {
-    id: crypto.randomUUID(),
-    type: 'plan',
-    name: `${template.name} Test`,
-    enabled: true,
-    properties: {},
-    children: [
-      {
-        id: crypto.randomUUID(),
-        type: 'scenario',
-        name: `${template.name} Scenario`,
-        enabled: true,
-        properties: template.scenarioProperties,
-        children: [],
-      },
-    ],
-  }
-}
-
-function buildBlankRoot(): Node {
-  return {
-    id: crypto.randomUUID(),
-    type: 'plan',
-    name: 'Untitled Plan',
-    enabled: true,
-    properties: {},
-    children: [],
-  }
-}
-
-export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
+export function TemplateGallery({ open, onClose, defaultEnvironmentId }: TemplateGalleryProps) {
   const [creating, setCreating] = useState<string | null>(null)
+  const toast = useToast()
+  const gridRef = useRef<HTMLDivElement>(null)
 
-  if (!open) return null
-
-  async function handleUseTemplate(template: TemplateConfig) {
-    setCreating(template.name)
+  async function create(template: TemplateConfig | null) {
+    setCreating(template?.name ?? 'blank')
     try {
       const root = buildPlanRoot(template)
-      const plan = await client.createPlan({
-        name: `${template.name} Test`,
-        description: template.description,
-        tags: [template.name.toLowerCase().replace(/[\s-]/g, '-')],
-        root,
-      })
-      navigate(`#/plans/${plan.id}`)
+      const plan = await unwrap(
+        api.POST('/api/v1/plans', {
+          body: {
+            name: root.name,
+            description: template?.description ?? '',
+            tags: template ? [template.name.toLowerCase().replace(/\s+/g, '-')] : [],
+            root,
+            default_environment_id: defaultEnvironmentId ?? null,
+          },
+        }),
+      )
       onClose()
-    } catch {
-      // Plan creation may fail if API is down
+      navigate(`#/plans/${plan.id}`)
+    } catch (e) {
+      toast(`Could not create the plan: ${errorMessage(e)}`, 'error')
     } finally {
       setCreating(null)
     }
   }
 
-  async function handleBlankPlan() {
-    setCreating('blank')
-    try {
-      const root = buildBlankRoot()
-      const plan = await client.createPlan({
-        name: 'Untitled Plan',
-        description: '',
-        tags: [],
-        root,
-      })
-      navigate(`#/plans/${plan.id}`)
-      onClose()
-    } catch {
-      // Plan creation may fail if API is down
-    } finally {
-      setCreating(null)
-    }
+  // Arrow keys move between cards (F-01: the gallery is keyboard-navigable).
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const cards = Array.from(gridRef.current?.querySelectorAll<HTMLButtonElement>('[data-card]') ?? [])
+    const i = cards.indexOf(document.activeElement as HTMLButtonElement)
+    if (i < 0) return
+    const cols = window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 2 : 1
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key]
+    if (step === undefined) return
+    e.preventDefault()
+    cards[Math.max(0, Math.min(cards.length - 1, i + step))]?.focus()
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="mx-4 max-h-[90vh] w-full max-w-[960px] overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100">New Test</h2>
-            <p className="mt-0.5 text-sm text-slate-400">
-              Choose a template or start with a blank plan
-            </p>
-          </div>
+    <Modal open={open} onClose={onClose} title="New test" width="max-w-5xl">
+      <p className="mb-4 text-sm text-slate-400">
+        Pick a load profile. The plan starts with a sample request to the bundled Echo test API, so you can run it straight
+        away and then point it at your own system.
+      </p>
+      <div ref={gridRef} onKeyDown={onKeyDown} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <button
+          type="button"
+          data-card
+          onClick={() => create(null)}
+          disabled={creating !== null}
+          className="flex flex-col items-start justify-center rounded-lg border border-dashed border-slate-700 p-4 text-left hover:border-slate-500 focus:border-teal-500 disabled:opacity-50"
+        >
+          <span className="text-sm font-semibold text-slate-100">{creating === 'blank' ? 'Creating…' : 'Blank plan'}</span>
+          <span className="mt-1 text-xs text-slate-400">1 VU for 30 seconds; build the rest yourself</span>
+        </button>
+        {TEMPLATES.map((t) => (
           <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Blank plan card */}
-        <div className="px-6 pt-5">
-          <button
-            onClick={handleBlankPlan}
+            key={t.name}
+            type="button"
+            data-card
+            onClick={() => create(t)}
             disabled={creating !== null}
-            className="flex w-full items-center gap-4 rounded-lg border border-dashed border-slate-700 bg-slate-900/50 px-4 py-3 text-left transition-colors hover:border-slate-600 hover:bg-slate-900 disabled:opacity-50"
+            className="flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900 text-left transition-colors hover:border-slate-600 focus:border-teal-500 disabled:opacity-50"
           >
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-slate-400" />
-              </svg>
+            <div className="border-b border-slate-800 px-3 pb-2 pt-3">
+              <LoadCurveSvg path={t.svgPath} name={t.name} />
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-200">
-                {creating === 'blank' ? 'Creating...' : 'Blank Plan'}
-              </p>
-              <p className="text-xs text-slate-500">Start from scratch with an empty plan</p>
+            <div className="flex flex-1 flex-col p-3">
+              <span className="text-sm font-semibold text-slate-100">{creating === t.name ? 'Creating…' : t.name}</span>
+              <span className="mt-0.5 text-xs text-slate-400">{t.description}</span>
             </div>
           </button>
-        </div>
-
-        {/* Template grid */}
-        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">
-          {TEMPLATES.map((template) => (
-            <div
-              key={template.name}
-              className="flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900 transition-colors hover:border-slate-700"
-            >
-              {/* SVG animation */}
-              <div className="border-b border-slate-800 px-3 pt-3 pb-2">
-                <LoadCurveSvg path={template.svgPath} name={template.name} />
-              </div>
-
-              {/* Card body */}
-              <div className="flex flex-1 flex-col p-3">
-                <h3 className="text-sm font-bold text-slate-100">{template.name}</h3>
-                <p className="mt-0.5 flex-1 text-xs text-slate-400">{template.description}</p>
-                <button
-                  onClick={() => handleUseTemplate(template)}
-                  disabled={creating !== null}
-                  className="mt-3 w-full rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-teal-500 disabled:opacity-50"
-                >
-                  {creating === template.name ? 'Creating...' : 'Use template'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
-    </div>
+    </Modal>
   )
 }

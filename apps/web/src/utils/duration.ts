@@ -1,26 +1,10 @@
-/**
- * Parse a k6 duration string ("30s", "2m", "4h") to integer seconds.
- */
-export function parseDurationToSeconds(d: string): number {
-  const match = d.match(/^(\d+(?:\.\d+)?)(s|m|h)$/)
-  if (!match) return 0
-  const value = parseFloat(match[1])
-  switch (match[2]) {
-    case 'h':
-      return Math.round(value * 3600)
-    case 'm':
-      return Math.round(value * 60)
-    case 's':
-    default:
-      return Math.round(value)
+/** Parses k6 durations to seconds: "30s", "2m", "1h30m", "500ms", or a bare number. */
+export function parseDurationToSeconds(d: string | undefined): number {
+  if (!d) return 0
+  if (/^\d+(\.\d+)?$/.test(d.trim())) return Number(d)
+  let total = 0
+  for (const [, n, unit] of d.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)) {
+    total += Number(n) * ({ h: 3600, m: 60, s: 1, ms: 0.001 } as Record<string, number>)[unit]
   }
-}
-
-/**
- * Convert seconds to a human-readable duration string.
- */
-export function formatSecondsToDuration(s: number): string {
-  if (s >= 3600 && s % 3600 === 0) return `${s / 3600}h`
-  if (s >= 60 && s % 60 === 0) return `${s / 60}m`
-  return `${s}s`
+  return total
 }

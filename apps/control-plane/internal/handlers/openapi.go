@@ -91,26 +91,26 @@ type keyTest struct {
 
 type aiConfigUpdate struct {
 	Provider      string   `json:"provider"`
-	APIKey        string   `json:"api_key"`
+	APIKey        string   `json:"api_key,omitempty"`
 	Model         string   `json:"model"`
 	MonthlyCap    *float64 `json:"monthly_cap_usd"`
 	Enabled       bool     `json:"enabled"`
-	AzureEndpoint string   `json:"azure_endpoint"`
+	AzureEndpoint string   `json:"azure_endpoint,omitempty"`
 }
 
 type fragmentRequest struct {
 	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Tags        []string     `json:"tags"`
+	Description string       `json:"description,omitempty"`
+	Tags        []string     `json:"tags,omitempty"`
 	NodeSubtree db.Node      `json:"node_subtree"`
-	Bindings    []db.Binding `json:"bindings"`
+	Bindings    []db.Binding `json:"bindings,omitempty"`
 }
 
 type reportRequest struct {
 	Name          string   `json:"name"`
 	RunIDs        []string `json:"run_ids"`
-	Metrics       []string `json:"metrics"`
-	Normalisation string   `json:"normalisation"`
+	Metrics       []string `json:"metrics,omitempty"`
+	Normalisation string   `json:"normalisation,omitempty"`
 }
 
 type metricsPayload struct {
@@ -122,8 +122,8 @@ type oauthStartRequest struct {
 	AuthURL      string `json:"auth_url"`
 	TokenURL     string `json:"token_url"`
 	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	Scope        string `json:"scope"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	Scope        string `json:"scope,omitempty"`
 }
 
 type oauthStartResponse struct {
@@ -135,8 +135,8 @@ type oauthStartResponse struct {
 type clientCredentialsRequest struct {
 	TokenURL     string `json:"token_url"`
 	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	Scope        string `json:"scope"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	Scope        string `json:"scope,omitempty"`
 }
 
 type storageInfo struct {
@@ -160,6 +160,11 @@ type cleanupResponse struct {
 
 type logsResponse struct {
 	Lines []string `json:"lines"`
+}
+
+type noteRequest struct {
+	Type    string         `json:"type,omitempty" enum:"user_note"`
+	Payload map[string]any `json:"payload"`
 }
 
 type versionResponse struct {
@@ -227,7 +232,7 @@ var Catalogue = []Op{
 	{"GET", "/api/v1/runs/{id}/report", "Full report document", "Runs", nil, RunReport{}, 0, "", nil, false},
 	{"GET", "/api/v1/runs/{id}/live", "Live-control state of a running test", "Runs", nil, engine.LiveState{}, 0, "", nil, false},
 	{"GET", "/api/v1/runs/{id}/events", "Run timeline events", "Runs", nil, items[db.RunEvent]{}, 0, "", nil, false},
-	{"POST", "/api/v1/runs/{id}/events", "Add a note to the timeline", "Runs", db.RunEvent{}, db.RunEvent{}, 201, "", nil, false},
+	{"POST", "/api/v1/runs/{id}/events", "Add a note to the timeline", "Runs", noteRequest{}, db.RunEvent{}, 201, "", nil, false},
 	{"PATCH", "/api/v1/runs/{id}/control", "Change VUs, RPS limit, duration or pause", "Runs", controlRequest{}, engine.LiveState{}, 0, "", nil, false},
 	{"GET", "/api/v1/runs/{id}/control-state", "Live-control state for the run's k6 control scenario (per-run token)", "Runs", nil, engine.ControlState{}, 0, "", nil, true},
 	{"POST", "/api/v1/runs/{id}/stop", "Stop gracefully", "Runs", nil, statusResponse{}, 0, "", nil, false},

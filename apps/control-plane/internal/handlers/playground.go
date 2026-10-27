@@ -41,11 +41,11 @@ func NewPlaygroundHandlers(collections *db.CollectionStore) *PlaygroundHandlers 
 type PlaygroundRequest struct {
 	Method        string            `json:"method"`
 	URL           string            `json:"url"`
-	Headers       map[string]string `json:"headers"`
-	Body          string            `json:"body"`
-	BodyType      string            `json:"body_type"`
-	AuthType      string            `json:"auth_type"` // none, basic, bearer, api_key, digest, oauth2, inherit
-	AuthConfig    json.RawMessage   `json:"auth_config"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Body          string            `json:"body,omitempty"`
+	BodyType      string            `json:"body_type,omitempty"`
+	AuthType      string            `json:"auth_type,omitempty"` // none, basic, bearer, api_key, digest, oauth2, inherit
+	AuthConfig    json.RawMessage   `json:"auth_config,omitempty"`
 	EnvironmentID string            `json:"environment_id,omitempty"`
 }
 
@@ -426,7 +426,7 @@ func (h *PlaygroundHandlers) ListCollections(w http.ResponseWriter, r *http.Requ
 
 type collectionRequest struct {
 	Name     string            `json:"name"`
-	Requests []db.SavedRequest `json:"requests"`
+	Requests []db.SavedRequest `json:"requests,omitempty"`
 }
 
 func (h *PlaygroundHandlers) CreateCollection(w http.ResponseWriter, r *http.Request) {

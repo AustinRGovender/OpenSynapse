@@ -13,6 +13,9 @@ export function LoadCurveSvg({ path, name }: { path: string; name: string }) {
           stroke-dashoffset: 600;
           animation: ${styleId} 4s ease-in-out infinite;
         }
+        @media (prefers-reduced-motion: reduce) {
+          .${styleId} { animation: none; stroke-dashoffset: 0; }
+        }
       `}</style>
       <rect width="200" height="80" rx="4" className="fill-slate-950" />
       {/* Grid lines */}

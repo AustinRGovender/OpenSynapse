@@ -20,8 +20,8 @@ func NewPlanHandlers(store *db.PlanStore) *PlanHandlers {
 
 type createPlanRequest struct {
 	Name                 string   `json:"name"`
-	Description          string   `json:"description"`
-	Tags                 []string `json:"tags"`
+	Description          string   `json:"description,omitempty"`
+	Tags                 []string `json:"tags,omitempty"`
 	DefaultEnvironmentID *string  `json:"default_environment_id"`
 	Root                 db.Node  `json:"root"`
 }

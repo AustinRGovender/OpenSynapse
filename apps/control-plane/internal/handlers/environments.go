@@ -19,7 +19,7 @@ func NewEnvironmentHandlers(store *db.EnvironmentStore) *EnvironmentHandlers {
 
 type createEnvironmentRequest struct {
 	Name      string                 `json:"name"`
-	Variables map[string]db.Variable `json:"variables"`
+	Variables map[string]db.Variable `json:"variables,omitempty"`
 }
 
 type updateEnvironmentRequest struct {
