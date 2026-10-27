@@ -30,7 +30,8 @@ export function EndpointTable({ endpoints }: { endpoints: EndpointStat[] }) {
             <tr key={`${e.method} ${e.name}`} className="border-t border-slate-800">
               <td className={`${td} max-w-md truncate font-mono`} title={`${e.method} ${e.name}`}>
                 <span className="mr-2 text-teal-300">{e.method}</span>
-                {e.name}
+                {/* Request nodes are usually named "GET /path"; don't repeat the method. */}
+                {e.method && e.name.startsWith(`${e.method} `) ? e.name.slice(e.method.length + 1) : e.name}
               </td>
               <td className={`${td} ${num}`}>{formatNumber(e.requests)}</td>
               <td className={`${td} ${num}`}>{e.rps.toFixed(1)}</td>

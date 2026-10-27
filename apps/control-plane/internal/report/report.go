@@ -204,9 +204,16 @@ type eventView struct {
 }
 
 var funcs = template.FuncMap{
-	"f1":    func(v float64) string { return fmt.Sprintf("%.1f", v) },
-	"f2":    func(v float64) string { return fmt.Sprintf("%.2f", v) },
-	"num":   func(v int64) string { return formatNum(float64(v)) },
+	"f1":  func(v float64) string { return fmt.Sprintf("%.1f", v) },
+	"f2":  func(v float64) string { return fmt.Sprintf("%.2f", v) },
+	"num": func(v int64) string { return formatNum(float64(v)) },
+	// endpoint shows "GET /path" once when the request is already named that way.
+	"endpoint": func(method, name string) string {
+		if method != "" && !strings.HasPrefix(name, method+" ") {
+			return method + " " + name
+		}
+		return name
+	},
 	"bytes": formatBytes,
 	"ts": func(ms int64) string {
 		return time.UnixMilli(ms).UTC().Format("15:04:05")
@@ -380,7 +387,7 @@ code { font-size: 11px; word-break: break-all; }
 <h2>Endpoints</h2>
 {{if .S.Endpoints}}<table>
 <tr><th>Endpoint</th><th class="n">Requests</th><th class="n">Errors</th><th class="n">Avg ms</th><th class="n">p95 ms</th><th class="n">p99 ms</th><th class="n">Max ms</th></tr>
-{{range .S.Endpoints}}<tr><td><code>{{.Method}} {{.Name}}</code></td><td class="n">{{num .Requests}}</td><td class="n {{if .Failed}}bad{{end}}">{{f2 .ErrorRate}}%</td><td class="n">{{f1 .AvgMS}}</td><td class="n">{{f1 .P95MS}}</td><td class="n">{{f1 .P99MS}}</td><td class="n">{{f1 .MaxMS}}</td></tr>
+{{range .S.Endpoints}}<tr><td><code>{{endpoint .Method .Name}}</code></td><td class="n">{{num .Requests}}</td><td class="n {{if .Failed}}bad{{end}}">{{f2 .ErrorRate}}%</td><td class="n">{{f1 .AvgMS}}</td><td class="n">{{f1 .P95MS}}</td><td class="n">{{f1 .P99MS}}</td><td class="n">{{f1 .MaxMS}}</td></tr>
 {{end}}</table>{{else}}<p class="empty">No requests recorded.</p>{{end}}
 </section>
 
