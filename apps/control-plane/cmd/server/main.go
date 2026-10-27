@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -87,7 +88,7 @@ func main() {
 	}
 	planStore.SeedBuiltInPlans()
 	defaultEnv := db.TestAPIsLocalEnv
-	if os.Getenv("OPENSYNAPSE_TEST_APIS") == "docker" {
+	if testAPIsInDocker() {
 		defaultEnv = db.TestAPIsDockerEnv
 	}
 	if id := envIDs[defaultEnv]; id != "" {
@@ -214,6 +215,27 @@ func main() {
 // bootstrapAdmin creates the first admin from OPENSYNAPSE_ADMIN_EMAIL and
 // OPENSYNAPSE_ADMIN_PASSWORD when team mode starts with no users. Without
 // them, the UI offers a one-time "create admin account" screen instead.
+// testAPIsInDocker reports whether the built-in plans should target the test
+// APIs by Docker service name. OPENSYNAPSE_TEST_APIS=docker|localhost decides;
+// unset, a container that can resolve the echo-api service (as under
+// user-testing/docker-compose.yml) counts as Docker. The lookup goes to
+// Docker's embedded DNS only, since it runs only inside a container.
+func testAPIsInDocker() bool {
+	switch os.Getenv("OPENSYNAPSE_TEST_APIS") {
+	case "docker":
+		return true
+	case "localhost":
+		return false
+	}
+	if _, err := os.Stat("/.dockerenv"); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := net.DefaultResolver.LookupHost(ctx, "echo-api")
+	return err == nil
+}
+
 func bootstrapAdmin(users *db.UserStore) {
 	if n, err := users.Count(); err != nil || n > 0 {
 		return
