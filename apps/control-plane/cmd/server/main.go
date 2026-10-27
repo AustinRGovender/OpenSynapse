@@ -14,19 +14,33 @@ import (
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/wsserver"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
+	handlers.BuildVersion = version
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8090"
 	}
+	// Bind to loopback by default so a desktop or dev install is not reachable
+	// from the network. Container images set OPENSYNAPSE_BIND=0.0.0.0.
+	bind := os.Getenv("OPENSYNAPSE_BIND")
+	if bind == "" {
+		bind = "127.0.0.1"
+	}
 
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatalf("cannot determine home directory: %v", err)
+		dataDir := os.Getenv("OPENSYNAPSE_DATA_DIR")
+		if dataDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatalf("cannot determine home directory: %v", err)
+			}
+			dataDir = filepath.Join(home, ".opensynapse")
 		}
-		dataDir := filepath.Join(home, ".opensynapse")
 		os.MkdirAll(dataDir, 0755)
 		dbPath = filepath.Join(dataDir, "opensynapse.db")
 	}
@@ -73,14 +87,14 @@ func main() {
 
 	r := router.New(planHandlers, envHandlers, runHandlers, reportHandlers, exportHandlers, playgroundHandlers, crawlHandlers, aiHandlers, fragmentHandlers, importHandlers, ws)
 
-	fmt.Printf("OpenSynapse control plane listening on :%s\n", port)
+	fmt.Printf("OpenSynapse control plane %s listening on %s:%s\n", version, bind, port)
 	fmt.Printf("Database: %s\n", dbPath)
 	if eng != nil {
 		fmt.Println("k6 engine: ready")
 	}
 	fmt.Printf("WebSocket: ws://localhost:%s/api/v1/ws\n", port)
 
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	if err := http.ListenAndServe(bind+":"+port, r); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }

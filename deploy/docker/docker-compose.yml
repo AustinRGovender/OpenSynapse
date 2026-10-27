@@ -7,6 +7,8 @@ services:
       - "8090:8090"
     environment:
       - PORT=8090
+    volumes:
+      - opensynapse-data:/data
     restart: unless-stopped
 
   web:
@@ -16,7 +18,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - control-plane
+      control-plane:
+        condition: service_healthy
     restart: unless-stopped
 
   zap:
@@ -24,3 +27,6 @@ services:
     command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true
     profiles: [security]
     restart: unless-stopped
+
+volumes:
+  opensynapse-data:

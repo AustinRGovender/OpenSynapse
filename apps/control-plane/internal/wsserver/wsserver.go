@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // Message is the WebSocket message format per docs/04-data-model-and-api.md section 3.

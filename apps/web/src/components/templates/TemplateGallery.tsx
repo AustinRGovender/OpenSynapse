@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { OpenSynapseClient, type Node } from '@opensynapse/api-client'
 import { type TemplateConfig, TEMPLATES } from './template-data'
 import { LoadCurveSvg } from './LoadCurveSvg'
+import { navigate } from '../../utils/navigate'
 
 const client = new OpenSynapseClient('/api/v1')
 
@@ -56,7 +57,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
         tags: [template.name.toLowerCase().replace(/[\s-]/g, '-')],
         root,
       })
-      window.location.hash = `#/plans/${plan.id}`
+      navigate(`#/plans/${plan.id}`)
       onClose()
     } catch {
       // Plan creation may fail if API is down
@@ -75,7 +76,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
         tags: [],
         root,
       })
-      window.location.hash = `#/plans/${plan.id}`
+      navigate(`#/plans/${plan.id}`)
       onClose()
     } catch {
       // Plan creation may fail if API is down

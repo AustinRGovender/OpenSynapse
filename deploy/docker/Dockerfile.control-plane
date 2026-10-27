@@ -1,23 +1,38 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
+ARG VERSION=dev
 WORKDIR /build
 COPY apps/control-plane/go.mod apps/control-plane/go.sum* ./
-RUN go mod download 2>/dev/null || true
+RUN go mod download
 COPY apps/control-plane/ .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /opensynapse-control ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o /opensynapse-control ./cmd/server
 
 # Build k6 with the xk6-kv extension baked in.
 # Required by the live-control design (externally-controlled executor + xk6-kv
 # token bucket). See docs/decisions/0007-k6-xk6-kv-bundled-in-control-plane-image.md.
-FROM golang:1.25-alpine AS k6-builder
+# Versions are pinned so image builds are reproducible; bump them deliberately.
+# k6 stays on the 1.x line: k6 v2 removed the externally-controlled executor
+# that live control depends on, and xk6-kv v1.4+ only builds against k6 v2
+# (see docs/decisions/0010-run-metrics-and-live-control.md).
+FROM golang:1.27-alpine AS k6-builder
+ARG XK6_VERSION=v1.4.15
+# Named K6_RELEASE rather than K6_VERSION: xk6 reads K6_VERSION from the
+# environment itself and rejects a build that also passes a version argument.
+ARG K6_RELEASE=v1.8.2
+ARG XK6_KV_VERSION=v1.3.0
 RUN apk add --no-cache git
-RUN go install go.k6.io/xk6/cmd/xk6@latest
-RUN xk6 build --with github.com/oleiade/xk6-kv --output /k6
+RUN go install go.k6.io/xk6/cmd/xk6@${XK6_VERSION}
+RUN xk6 build ${K6_RELEASE} --with github.com/oleiade/xk6-kv@${XK6_KV_VERSION} --output /k6
 
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates chromium nss freetype harfbuzz
-ENV ROD_BROWSER_BIN=/usr/bin/chromium-browser
+FROM alpine:3.24
+RUN apk add --no-cache ca-certificates chromium nss freetype harfbuzz font-noto
+ENV ROD_BROWSER_BIN=/usr/bin/chromium-browser \
+    OPENSYNAPSE_BIND=0.0.0.0 \
+    OPENSYNAPSE_DATA_DIR=/data
 COPY --from=k6-builder /k6 /usr/local/bin/k6
 COPY --from=builder /opensynapse-control /usr/local/bin/opensynapse-control
+VOLUME /data
 EXPOSE 8090
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8090/health || exit 1
 ENTRYPOINT ["opensynapse-control"]
