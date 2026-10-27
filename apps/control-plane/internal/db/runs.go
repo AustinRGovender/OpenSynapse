@@ -75,20 +75,24 @@ type CheckStat struct {
 }
 
 type Run struct {
-	ID                  string         `json:"id"`
-	PlanID              string         `json:"plan_id"`
-	PlanVersion         int            `json:"plan_version"`
+	ID                  string          `json:"id"`
+	PlanID              string          `json:"plan_id"`
+	PlanVersion         int             `json:"plan_version"`
 	PlanSnapshot        json.RawMessage `json:"plan_snapshot"`
 	EnvironmentSnapshot json.RawMessage `json:"environment_snapshot,omitempty"`
-	Parameters          RunParameters  `json:"parameters"`
-	Status              string         `json:"status"`
-	StartedAt           *time.Time     `json:"started_at"`
-	EndedAt             *time.Time     `json:"ended_at"`
-	Summary             *RunSummary    `json:"summary"`
-	CreatedAt           time.Time      `json:"created_at"`
+	Parameters          RunParameters   `json:"parameters"`
+	Status              string          `json:"status"`
+	StartedAt           *time.Time      `json:"started_at"`
+	EndedAt             *time.Time      `json:"ended_at"`
+	Summary             *RunSummary     `json:"summary"`
+	CreatedAt           time.Time       `json:"created_at"`
 	// PlanName is the plan's current name (or its name at run time if the
 	// plan has since been deleted).
 	PlanName string `json:"plan_name"`
+	// CreatedBy is the user who started the run (team mode).
+	CreatedBy string `json:"created_by,omitempty"`
+	// CreatedByName is that user's display name, when known.
+	CreatedByName string `json:"created_by_name,omitempty"`
 }
 
 // RunFilter narrows a run listing.
@@ -105,7 +109,11 @@ const timestampFormat = "2006-01-02T15:04:05.000000000Z07:00"
 
 const runColumns = `r.id, r.plan_id, r.plan_version, r.environment_snapshot, r.parameters, r.status,
 	r.started_at, r.ended_at, r.summary, r.created_at,
-	COALESCE(p.name, json_extract(r.plan_snapshot, '$.name'), '')`
+	COALESCE(p.name, json_extract(r.plan_snapshot, '$.name'), ''),
+	COALESCE(r.created_by, ''), COALESCE(u.display_name, '')`
+
+// runJoins attach the plan and starting user to a run row.
+const runJoins = ` FROM runs r LEFT JOIN plans p ON p.id = r.plan_id LEFT JOIN users u ON u.id = r.created_by`
 
 func scanRun(scan func(dest ...any) error) (*Run, error) {
 	var r Run
@@ -114,7 +122,7 @@ func scanRun(scan func(dest ...any) error) (*Run, error) {
 	var envSnap, startedAt, endedAt, summaryStr sql.NullString
 	var createdAt string
 	if err := scan(&r.ID, &planID, &r.PlanVersion, &envSnap, &paramsStr, &r.Status,
-		&startedAt, &endedAt, &summaryStr, &createdAt, &r.PlanName); err != nil {
+		&startedAt, &endedAt, &summaryStr, &createdAt, &r.PlanName, &r.CreatedBy, &r.CreatedByName); err != nil {
 		return nil, err
 	}
 	r.PlanID = planID.String
@@ -190,8 +198,7 @@ func (s *RunStore) Create(planID string, planVersion int, planSnapshot json.RawM
 }
 
 func (s *RunStore) Get(id string) (*Run, error) {
-	row := s.db.QueryRow(`SELECT `+runColumns+`, r.plan_snapshot
-		FROM runs r LEFT JOIN plans p ON p.id = r.plan_id WHERE r.id = ?`, id)
+	row := s.db.QueryRow(`SELECT `+runColumns+`, r.plan_snapshot`+runJoins+` WHERE r.id = ?`, id)
 	var planSnap string
 	run, err := scanRun(func(dest ...any) error { return row.Scan(append(dest, &planSnap)...) })
 	if err == sql.ErrNoRows {
@@ -211,7 +218,7 @@ func (s *RunStore) List(f RunFilter) (*ListResult[Run], error) {
 		limit = 50
 	}
 
-	query := `SELECT ` + runColumns + ` FROM runs r LEFT JOIN plans p ON p.id = r.plan_id WHERE 1=1`
+	query := `SELECT ` + runColumns + runJoins + ` WHERE 1=1`
 	var args []any
 	if f.Cursor != "" {
 		query += " AND r.created_at < ?"
@@ -304,6 +311,12 @@ func (s *RunStore) UpdateStatus(id, status string) error {
 		_, err := s.db.Exec("UPDATE runs SET status=? WHERE id=?", status, id)
 		return err
 	}
+}
+
+// SetCreatedBy records which user started a run.
+func (s *RunStore) SetCreatedBy(id, userID string) error {
+	_, err := s.db.Exec(`UPDATE runs SET created_by = ? WHERE id = ?`, userID, id)
+	return err
 }
 
 func (s *RunStore) UpdateSummary(id string, summary *RunSummary) error {

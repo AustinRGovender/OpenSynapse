@@ -233,11 +233,11 @@ func (p *AzureOpenAIProvider) TestKey(apiKey, model string) error {
 func estimateCost(model string, inputTokens, outputTokens int) float64 {
 	// Approximate pricing per 1M tokens (input/output)
 	prices := map[string][2]float64{
-		"gpt-4o":          {2.50, 10.00},
-		"gpt-4-turbo":     {10.00, 30.00},
-		"gpt-3.5-turbo":   {0.50, 1.50},
-		"claude-sonnet-4-20250514":  {3.00, 15.00},
-		"claude-haiku-4-20250414": {0.80, 4.00},
+		"gpt-4o":                   {2.50, 10.00},
+		"gpt-4-turbo":              {10.00, 30.00},
+		"gpt-3.5-turbo":            {0.50, 1.50},
+		"claude-sonnet-4-20250514": {3.00, 15.00},
+		"claude-haiku-4-20250414":  {0.80, 4.00},
 	}
 
 	price, ok := prices[model]

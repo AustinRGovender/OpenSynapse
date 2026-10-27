@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/handlers"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/observability"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/wsserver"
 )
 
@@ -20,6 +21,8 @@ type Deps struct {
 	Fragments  *handlers.FragmentHandlers
 	Imports    *handlers.ImportHandlers
 	System     *handlers.SystemHandlers
+	Auth       *handlers.AuthHandlers
+	Settings   *handlers.SettingsHandlers
 	WS         *wsserver.Server
 
 	// Middleware wraps the whole mux (security, auth, logging, metrics).
@@ -36,15 +39,43 @@ func New(d Deps) http.Handler {
 	Routes = Routes[:0]
 	handle := func(pattern string, h http.HandlerFunc) {
 		Routes = append(Routes, pattern)
-		mux.HandleFunc(pattern, h)
+		mux.HandleFunc(pattern, observability.Default.Instrument(pattern, h))
 	}
 
 	// System endpoints
 	handle("GET /health", handlers.Health)
 	handle("GET /ready", handlers.Ready)
 	handle("GET /version", handlers.Version)
+	handle("GET /metrics", observability.Default.Handler)
 	if d.System != nil {
 		handle("GET /api/v1/system/info", d.System.Info)
+	}
+
+	// Authentication and accounts (docs/04 section 5)
+	if d.Auth != nil {
+		handle("GET /api/v1/auth/session", d.Auth.Session)
+		handle("POST /api/v1/auth/setup", d.Auth.Setup)
+		handle("POST /api/v1/auth/login", d.Auth.Login)
+		handle("POST /api/v1/auth/logout", d.Auth.Logout)
+		handle("GET /api/v1/auth/me", d.Auth.Me)
+		handle("PUT /api/v1/auth/password", d.Auth.ChangePassword)
+		handle("GET /api/v1/auth/tokens", d.Auth.ListTokens)
+		handle("POST /api/v1/auth/tokens", d.Auth.CreateToken)
+		handle("DELETE /api/v1/auth/tokens/{id}", d.Auth.DeleteToken)
+		handle("GET /api/v1/users", d.Auth.ListUsers)
+		handle("POST /api/v1/users", d.Auth.CreateUser)
+		handle("PUT /api/v1/users/{id}", d.Auth.UpdateUser)
+		handle("DELETE /api/v1/users/{id}", d.Auth.DeleteUser)
+	}
+
+	// Settings (F-11)
+	if d.Settings != nil {
+		handle("GET /api/v1/settings", d.Settings.Get)
+		handle("PUT /api/v1/settings", d.Settings.Update)
+		handle("GET /api/v1/storage", d.Settings.Storage)
+		handle("POST /api/v1/storage/cleanup", d.Settings.Cleanup)
+		handle("POST /api/v1/diagnostics", d.Settings.Diagnostics)
+		handle("GET /api/v1/system/logs", d.Settings.Logs)
 	}
 
 	// Plans API (section 2.1)

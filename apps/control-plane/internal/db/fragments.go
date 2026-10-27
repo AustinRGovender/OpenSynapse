@@ -40,15 +40,21 @@ func (s *FragmentStore) Create(name, description string, tags []string, subtree 
 	id := uuid.New().String()
 	now := time.Now().UTC()
 
-	if tags == nil { tags = []string{} }
-	if bindings == nil { bindings = []Binding{} }
+	if tags == nil {
+		tags = []string{}
+	}
+	if bindings == nil {
+		bindings = []Binding{}
+	}
 
 	tagsJSON, _ := json.Marshal(tags)
 	subtreeJSON, _ := json.Marshal(subtree)
 	bindingsJSON, _ := json.Marshal(bindings)
 	nowStr := now.Format(time.RFC3339)
 	builtInInt := 0
-	if builtIn { builtInInt = 1 }
+	if builtIn {
+		builtInInt = 1
+	}
 
 	_, err := s.db.Exec(
 		`INSERT INTO fragments (id, name, description, tags, node_subtree, bindings, built_in, created_at, updated_at)
@@ -75,14 +81,22 @@ func (s *FragmentStore) Get(id string) (*Fragment, error) {
 		`SELECT id, name, description, tags, node_subtree, bindings, built_in, created_at, updated_at
 		 FROM fragments WHERE id = ?`, id,
 	).Scan(&f.ID, &f.Name, &f.Description, &tagsStr, &subtreeStr, &bindingsStr, &builtInInt, &createdAt, &updatedAt)
-	if err == sql.ErrNoRows { return nil, nil }
-	if err != nil { return nil, fmt.Errorf("get fragment: %w", err) }
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get fragment: %w", err)
+	}
 
 	json.Unmarshal([]byte(tagsStr), &f.Tags)
 	json.Unmarshal([]byte(subtreeStr), &f.NodeSubtree)
 	json.Unmarshal([]byte(bindingsStr), &f.Bindings)
-	if f.Tags == nil { f.Tags = []string{} }
-	if f.Bindings == nil { f.Bindings = []Binding{} }
+	if f.Tags == nil {
+		f.Tags = []string{}
+	}
+	if f.Bindings == nil {
+		f.Bindings = []Binding{}
+	}
 	f.BuiltIn = builtInInt == 1
 	f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	f.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
@@ -94,7 +108,9 @@ func (s *FragmentStore) List() (*ListResult[Fragment], error) {
 		`SELECT id, name, description, tags, node_subtree, bindings, built_in, created_at, updated_at
 		 FROM fragments ORDER BY built_in DESC, name ASC`,
 	)
-	if err != nil { return nil, fmt.Errorf("list fragments: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("list fragments: %w", err)
+	}
 	defer rows.Close()
 
 	var fragments []Fragment
@@ -108,26 +124,42 @@ func (s *FragmentStore) List() (*ListResult[Fragment], error) {
 		json.Unmarshal([]byte(tagsStr), &f.Tags)
 		json.Unmarshal([]byte(subtreeStr), &f.NodeSubtree)
 		json.Unmarshal([]byte(bindingsStr), &f.Bindings)
-		if f.Tags == nil { f.Tags = []string{} }
-		if f.Bindings == nil { f.Bindings = []Binding{} }
+		if f.Tags == nil {
+			f.Tags = []string{}
+		}
+		if f.Bindings == nil {
+			f.Bindings = []Binding{}
+		}
 		f.BuiltIn = builtInInt == 1
 		f.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		f.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 		fragments = append(fragments, f)
 	}
-	if fragments == nil { fragments = []Fragment{} }
+	if fragments == nil {
+		fragments = []Fragment{}
+	}
 	return &ListResult[Fragment]{Items: fragments}, nil
 }
 
 func (s *FragmentStore) Update(id, name, description string, tags []string, subtree Node, bindings []Binding) (*Fragment, error) {
 	existing, err := s.Get(id)
-	if err != nil { return nil, err }
-	if existing == nil { return nil, nil }
-	if existing.BuiltIn { return nil, fmt.Errorf("cannot modify built-in fragment") }
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, nil
+	}
+	if existing.BuiltIn {
+		return nil, fmt.Errorf("cannot modify built-in fragment")
+	}
 
 	now := time.Now().UTC()
-	if tags == nil { tags = []string{} }
-	if bindings == nil { bindings = []Binding{} }
+	if tags == nil {
+		tags = []string{}
+	}
+	if bindings == nil {
+		bindings = []Binding{}
+	}
 	tagsJSON, _ := json.Marshal(tags)
 	subtreeJSON, _ := json.Marshal(subtree)
 	bindingsJSON, _ := json.Marshal(bindings)
@@ -137,7 +169,9 @@ func (s *FragmentStore) Update(id, name, description string, tags []string, subt
 		`UPDATE fragments SET name=?, description=?, tags=?, node_subtree=?, bindings=?, updated_at=? WHERE id=?`,
 		name, description, string(tagsJSON), string(subtreeJSON), string(bindingsJSON), nowStr, id,
 	)
-	if err != nil { return nil, fmt.Errorf("update fragment: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("update fragment: %w", err)
+	}
 
 	return &Fragment{
 		ID: id, Name: name, Description: description, Tags: tags,
@@ -150,9 +184,15 @@ func (s *FragmentStore) Delete(id string) error {
 	// Check if built-in
 	var builtIn int
 	err := s.db.QueryRow("SELECT built_in FROM fragments WHERE id = ?", id).Scan(&builtIn)
-	if err == sql.ErrNoRows { return fmt.Errorf("fragment not found") }
-	if err != nil { return err }
-	if builtIn == 1 { return fmt.Errorf("cannot delete built-in fragment") }
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("fragment not found")
+	}
+	if err != nil {
+		return err
+	}
+	if builtIn == 1 {
+		return fmt.Errorf("cannot delete built-in fragment")
+	}
 
 	_, err = s.db.Exec("DELETE FROM fragments WHERE id = ?", id)
 	return err
@@ -162,7 +202,9 @@ func (s *FragmentStore) Delete(id string) error {
 func (s *FragmentStore) SeedBuiltInFragments() error {
 	var count int
 	s.db.QueryRow("SELECT COUNT(*) FROM fragments WHERE built_in = 1").Scan(&count)
-	if count > 0 { return nil }
+	if count > 0 {
+		return nil
+	}
 
 	fragments := builtInFragments()
 	for _, f := range fragments {
@@ -178,7 +220,7 @@ func builtInFragments() []Fragment {
 				Properties: json.RawMessage(`{}`),
 				Children: []Node{{ID: "frag-login-req", Type: "http", Name: "POST Login", Enabled: true,
 					Properties: json.RawMessage(`{"method":"POST","url":"${BASE_URL}/login","headers":[{"key":"Content-Type","value":"application/x-www-form-urlencoded"}],"body":{"type":"form","content":"username=${USERNAME}&password=${PASSWORD}"},"follow_redirects":true}`),
-					Children: []Node{}}}},
+					Children:   []Node{}}}},
 			Bindings: []Binding{{Name: "USERNAME", Description: "Login username", Required: true}, {Name: "PASSWORD", Description: "Login password", Required: true}}},
 		{Name: "CSRF Token Extraction", Description: "Extract CSRF token from a page and use it in subsequent requests", Tags: []string{"auth", "csrf"},
 			NodeSubtree: Node{ID: "frag-csrf", Type: "transaction-controller", Name: "CSRF Flow", Enabled: true, Properties: json.RawMessage(`{}`),

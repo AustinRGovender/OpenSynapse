@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/secrets"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,7 +41,37 @@ func (e *Environment) Redacted() *Environment {
 }
 
 type EnvironmentStore struct {
-	db *sql.DB
+	db  *sql.DB
+	box *secrets.Box
+}
+
+// UseSecrets enables encryption at rest for secret variables.
+func (s *EnvironmentStore) UseSecrets(b *secrets.Box) { s.box = b }
+
+// sealVars encrypts secret values for storage.
+func (s *EnvironmentStore) sealVars(vars map[string]Variable) map[string]Variable {
+	out := make(map[string]Variable, len(vars))
+	for k, v := range vars {
+		if v.Secret {
+			v.Value = s.box.Seal(v.Value)
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// openVars decrypts secret values read from storage.
+func (s *EnvironmentStore) openVars(vars map[string]Variable) {
+	for k, v := range vars {
+		if v.Secret {
+			if plain, err := s.box.Open(v.Value); err == nil {
+				v.Value = plain
+			} else {
+				v.Value = ""
+			}
+			vars[k] = v
+		}
+	}
 }
 
 func NewEnvironmentStore(db *sql.DB) *EnvironmentStore {
@@ -55,7 +86,7 @@ func (s *EnvironmentStore) Create(name string, variables map[string]Variable) (*
 		variables = map[string]Variable{}
 	}
 
-	varsJSON, err := json.Marshal(variables)
+	varsJSON, err := json.Marshal(s.sealVars(variables))
 	if err != nil {
 		return nil, fmt.Errorf("marshal variables: %w", err)
 	}
@@ -94,9 +125,10 @@ func (s *EnvironmentStore) Get(id string) (*Environment, error) {
 		return nil, fmt.Errorf("get environment: %w", err)
 	}
 
-	if err := json.Unmarshal([]byte(varsStr), &e.Variables); err != nil {
+	if err := json.Unmarshal([]byte(varsStr), &e.Variables); err != nil || e.Variables == nil {
 		e.Variables = map[string]Variable{}
 	}
+	s.openVars(e.Variables)
 	e.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	e.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 
@@ -143,6 +175,7 @@ func (s *EnvironmentStore) List(params ListParams) (*ListResult[Environment], er
 		if e.Variables == nil {
 			e.Variables = map[string]Variable{}
 		}
+		s.openVars(e.Variables)
 		e.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		e.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 
@@ -174,8 +207,16 @@ func (s *EnvironmentStore) Update(id, name string, variables map[string]Variable
 	if variables == nil {
 		variables = map[string]Variable{}
 	}
+	for k, v := range variables {
+		if v.Secret && v.Value == RedactedValue {
+			if old, ok := existing.Variables[k]; ok {
+				v.Value = old.Value
+				variables[k] = v
+			}
+		}
+	}
 
-	varsJSON, _ := json.Marshal(variables)
+	varsJSON, _ := json.Marshal(s.sealVars(variables))
 	nowStr := now.Format(time.RFC3339)
 
 	_, err = s.db.Exec(

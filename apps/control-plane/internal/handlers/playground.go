@@ -109,8 +109,8 @@ func (h *PlaygroundHandlers) ExecuteRequest(w http.ResponseWriter, r *http.Reque
 		DNSDone:              func(_ httptrace.DNSDoneInfo) { dnsEnd = time.Now() },
 		ConnectStart:         func(_, _ string) { connStart = time.Now() },
 		ConnectDone:          func(_, _ string, _ error) { connEnd = time.Now() },
-		TLSHandshakeStart:   func() { tlsStart = time.Now() },
-		TLSHandshakeDone:    func(_ tls.ConnectionState, _ error) { tlsEnd = time.Now() },
+		TLSHandshakeStart:    func() { tlsStart = time.Now() },
+		TLSHandshakeDone:     func(_ tls.ConnectionState, _ error) { tlsEnd = time.Now() },
 		GotFirstResponseByte: func() { gotFirstByte = time.Now() },
 	}
 
@@ -238,8 +238,8 @@ func (h *PlaygroundHandlers) ListCollections(w http.ResponseWriter, r *http.Requ
 
 func (h *PlaygroundHandlers) CreateCollection(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name     string             `json:"name"`
-		Requests []db.SavedRequest  `json:"requests"`
+		Name     string            `json:"name"`
+		Requests []db.SavedRequest `json:"requests"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		badRequest(w, "INVALID_JSON", "Request body is not valid JSON", nil)

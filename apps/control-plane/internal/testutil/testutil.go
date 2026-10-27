@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/auth"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/engine"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/handlers"
@@ -33,7 +34,13 @@ type TestServer struct {
 	Envs   *db.EnvironmentStore
 	Runs   *db.RunStore
 	RunAPI *handlers.RunHandlers
+	Users  *db.UserStore
+	// Token is sent automatically by Do when a request has no Authorization header.
+	Token string
 }
+
+// LocalToken is the installation token test servers use in local mode.
+const LocalToken = "osl_test-token"
 
 // Options customise a test server.
 type Options struct {
@@ -41,6 +48,8 @@ type Options struct {
 	Engine *engine.Engine
 	// DataDir receives raw run samples.
 	DataDir string
+	// TeamMode requires sign-in (no automatic token is sent).
+	TeamMode bool
 }
 
 // NewTestServer creates a test server with an in-memory database and no engine.
@@ -64,10 +73,16 @@ func NewTestServerWith(t *testing.T, opts Options) *TestServer {
 	fragmentStore.SeedBuiltInFragments()
 	planStore.SeedBuiltInPlans()
 
+	users := db.NewUserStore(database)
+	settingsStore := db.NewSettingsStore(database)
+	authSvc := &auth.Service{TeamMode: opts.TeamMode, LocalToken: LocalToken, Users: users}
+
 	ws := wsserver.New()
+	ws.Authenticate = func(t string) bool { _, ok := authSvc.Authenticate(t); return ok }
 	runHandlers := handlers.NewRunHandlers(runStore, planStore, envStore, opts.Engine, ws)
 	runHandlers.DataDir = opts.DataDir
 
+	system := &handlers.SystemHandlers{Engine: opts.Engine, WS: ws, Mode: "desktop", DataDir: opts.DataDir}
 	deps := router.Deps{
 		Plans:      handlers.NewPlanHandlers(planStore),
 		Envs:       handlers.NewEnvironmentHandlers(envStore),
@@ -79,9 +94,11 @@ func NewTestServerWith(t *testing.T, opts Options) *TestServer {
 		AI:         handlers.NewAIHandlers(aiStore, runStore, reportStore),
 		Fragments:  handlers.NewFragmentHandlers(fragmentStore),
 		Imports:    handlers.NewImportHandlers(planStore),
-		System:     &handlers.SystemHandlers{Engine: opts.Engine, WS: ws, Mode: "desktop"},
+		System:     system,
+		Auth:       handlers.NewAuthHandlers(authSvc, users),
+		Settings:   handlers.NewSettingsHandlers(settingsStore, runStore, system),
 		WS:         ws,
-		Middleware: []func(http.Handler) http.Handler{httpx.Middleware(httpx.SecurityConfig{})},
+		Middleware: []func(http.Handler) http.Handler{httpx.Middleware(httpx.SecurityConfig{}), authSvc.Middleware},
 	}
 
 	srv := httptest.NewServer(router.New(deps))
@@ -89,14 +106,19 @@ func NewTestServerWith(t *testing.T, opts Options) *TestServer {
 	// k6's control scenario reaches the API over loopback, like in production.
 	runHandlers.ControlBaseURL = srv.URL
 
-	return &TestServer{
+	ts := &TestServer{
 		Server: srv,
 		DB:     database,
 		Plans:  planStore,
 		Envs:   envStore,
 		Runs:   runStore,
 		RunAPI: runHandlers,
+		Users:  users,
 	}
+	if !opts.TeamMode {
+		ts.Token = LocalToken
+	}
+	return ts
 }
 
 // URL returns the test server's base URL.
@@ -104,8 +126,12 @@ func (ts *TestServer) URL() string {
 	return ts.Server.URL
 }
 
-// Do executes an HTTP request against the test server.
+// Do executes an HTTP request against the test server, adding the server's
+// token when the request carries none.
 func (ts *TestServer) Do(req *http.Request) *http.Response {
+	if ts.Token != "" && req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+ts.Token)
+	}
 	resp, err := ts.Server.Client().Do(req)
 	if err != nil {
 		panic("test request failed: " + err.Error())

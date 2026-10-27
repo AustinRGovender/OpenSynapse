@@ -65,6 +65,10 @@ type SystemInfo struct {
 }
 
 func (h *SystemHandlers) Info(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.info())
+}
+
+func (h *SystemHandlers) info() SystemInfo {
 	info := SystemInfo{
 		Version:  BuildVersion,
 		Mode:     h.Mode,
@@ -86,7 +90,7 @@ func (h *SystemHandlers) Info(w http.ResponseWriter, r *http.Request) {
 		info.WebSocket.Clients = h.WS.ClientCount()
 		info.WebSocket.DroppedFrames = h.WS.DroppedFrames()
 	}
-	writeJSON(w, http.StatusOK, info)
+	return info
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/auth"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/compiler"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/engine"
@@ -196,6 +197,9 @@ func (h *RunHandlers) Start(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		internalError(w, err)
 		return
+	}
+	if p := auth.FromContext(r.Context()); p != nil && p.UserID != "" {
+		h.runs.SetCreatedBy(run.ID, p.UserID)
 	}
 
 	spec := engine.RunSpec{

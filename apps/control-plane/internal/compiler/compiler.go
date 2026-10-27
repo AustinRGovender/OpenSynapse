@@ -575,10 +575,10 @@ func expectedStatuses(children []db.Node) []int {
 			continue
 		}
 		var a struct {
-			Target    string  `json:"target"`
-			Condition string  `json:"condition"`
-			Value     any     `json:"value"`
-			Negate    bool    `json:"negate"`
+			Target    string `json:"target"`
+			Condition string `json:"condition"`
+			Value     any    `json:"value"`
+			Negate    bool   `json:"negate"`
 		}
 		if json.Unmarshal(ch.Properties, &a) != nil || a.Target != "status" || a.Condition != "equals" || a.Negate {
 			continue

@@ -1,7 +1,7 @@
 # ADR-0005: WebSocket origin policy and `InsecureSkipVerify` scope
 
 **Date:** 2026-04-16
-**Status:** accepted
+**Status:** amended by ADR-0011 (origin checks now enforced)
 **Authors:** OpenSynapse team
 
 ## Context

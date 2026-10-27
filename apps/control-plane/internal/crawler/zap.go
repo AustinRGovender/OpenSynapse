@@ -111,10 +111,10 @@ func (e *ZAPEngine) ping(client *http.Client, base string) error {
 
 func (e *ZAPEngine) startSpider(client *http.Client, base, targetURL string, maxDepth int) (string, error) {
 	params := url.Values{
-		"url":          {targetURL},
-		"maxChildren":  {"0"},
-		"recurse":      {"true"},
-		"subtreeOnly":  {"true"},
+		"url":         {targetURL},
+		"maxChildren": {"0"},
+		"recurse":     {"true"},
+		"subtreeOnly": {"true"},
 	}
 	if maxDepth > 0 {
 		params.Set("maxDepth", strconv.Itoa(maxDepth))
@@ -202,14 +202,14 @@ func (e *ZAPEngine) setupAuth(client *http.Client, base string, cfg CrawlConfig)
 	case "bearer":
 		// Add a global replacer for Authorization header
 		params := url.Values{
-			"description":    {"BearerAuth"},
-			"enabled":        {"true"},
-			"matchType":      {"REQ_HEADER"},
-			"matchRegex":     {"false"},
-			"matchString":    {"Authorization:"},
-			"replacement":    {"Authorization: Bearer " + cfg.Auth.Token},
-			"initiators":     {""},
-			"url":            {""},
+			"description": {"BearerAuth"},
+			"enabled":     {"true"},
+			"matchType":   {"REQ_HEADER"},
+			"matchRegex":  {"false"},
+			"matchString": {"Authorization:"},
+			"replacement": {"Authorization: Bearer " + cfg.Auth.Token},
+			"initiators":  {""},
+			"url":         {""},
 		}
 		resp, err := client.Get(base + "/JSON/replacer/action/addRule/?" + params.Encode())
 		if err != nil {
@@ -219,14 +219,14 @@ func (e *ZAPEngine) setupAuth(client *http.Client, base string, cfg CrawlConfig)
 	case "basic":
 		encoded := "Basic " + basicB64(cfg.Auth.Username, cfg.Auth.Password)
 		params := url.Values{
-			"description":    {"BasicAuth"},
-			"enabled":        {"true"},
-			"matchType":      {"REQ_HEADER"},
-			"matchRegex":     {"false"},
-			"matchString":    {"Authorization:"},
-			"replacement":    {"Authorization: " + encoded},
-			"initiators":     {""},
-			"url":            {""},
+			"description": {"BasicAuth"},
+			"enabled":     {"true"},
+			"matchType":   {"REQ_HEADER"},
+			"matchRegex":  {"false"},
+			"matchString": {"Authorization:"},
+			"replacement": {"Authorization: " + encoded},
+			"initiators":  {""},
+			"url":         {""},
 		}
 		resp, err := client.Get(base + "/JSON/replacer/action/addRule/?" + params.Encode())
 		if err != nil {
@@ -236,8 +236,8 @@ func (e *ZAPEngine) setupAuth(client *http.Client, base string, cfg CrawlConfig)
 	case "form_login":
 		// ZAP form-based auth requires creating an auth context — simplified approach
 		params := url.Values{
-			"url":          {cfg.EntryURL},
-			"requestData":  {"username=" + url.QueryEscape(cfg.Auth.Username) + "&password=" + url.QueryEscape(cfg.Auth.Password)},
+			"url":         {cfg.EntryURL},
+			"requestData": {"username=" + url.QueryEscape(cfg.Auth.Username) + "&password=" + url.QueryEscape(cfg.Auth.Password)},
 		}
 		resp, err := client.Get(base + "/JSON/authentication/action/setAuthenticationMethod/?" + params.Encode())
 		if err != nil {

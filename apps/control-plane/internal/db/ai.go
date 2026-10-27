@@ -4,38 +4,43 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/secrets"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type AIConfig struct {
-	Provider       string   `json:"provider"`
-	APIKeyMasked   string   `json:"api_key_masked"`   // Only last 4 chars shown
-	Model          string   `json:"model"`
-	MonthlyCap     *float64 `json:"monthly_cap_usd"`
-	Enabled        bool     `json:"enabled"`
-	AzureEndpoint  string   `json:"azure_endpoint,omitempty"`
+	Provider      string   `json:"provider"`
+	APIKeyMasked  string   `json:"api_key_masked"` // Only last 4 chars shown
+	Model         string   `json:"model"`
+	MonthlyCap    *float64 `json:"monthly_cap_usd"`
+	Enabled       bool     `json:"enabled"`
+	AzureEndpoint string   `json:"azure_endpoint,omitempty"`
 }
 
 type AIAnalysis struct {
-	ID           string  `json:"id"`
-	RunID        *string `json:"run_id,omitempty"`
-	ReportID     *string `json:"report_id,omitempty"`
-	Question     string  `json:"question"`
-	Prompt       string  `json:"prompt"`
-	Response     string  `json:"response"`
-	Provider     string  `json:"provider"`
-	Model        string  `json:"model"`
-	InputTokens  int     `json:"input_tokens"`
-	OutputTokens int     `json:"output_tokens"`
-	CostUSD      float64 `json:"cost_usd"`
+	ID           string    `json:"id"`
+	RunID        *string   `json:"run_id,omitempty"`
+	ReportID     *string   `json:"report_id,omitempty"`
+	Question     string    `json:"question"`
+	Prompt       string    `json:"prompt"`
+	Response     string    `json:"response"`
+	Provider     string    `json:"provider"`
+	Model        string    `json:"model"`
+	InputTokens  int       `json:"input_tokens"`
+	OutputTokens int       `json:"output_tokens"`
+	CostUSD      float64   `json:"cost_usd"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 type AIStore struct {
-	db *sql.DB
+	db  *sql.DB
+	box *secrets.Box
 }
+
+// UseSecrets enables encryption at rest for the provider key.
+func (s *AIStore) UseSecrets(b *secrets.Box) { s.box = b }
 
 func NewAIStore(db *sql.DB) *AIStore {
 	return &AIStore{db: db}
@@ -60,7 +65,7 @@ func (s *AIStore) GetConfig() (*AIConfig, error) {
 
 	config := &AIConfig{
 		Provider:      provider,
-		APIKeyMasked:  maskKey(keyEnc),
+		APIKeyMasked:  maskKey(s.open(keyEnc)),
 		Model:         model,
 		Enabled:       enabled == 1,
 		AzureEndpoint: azureEndpoint,
@@ -78,7 +83,18 @@ func (s *AIStore) GetRawKey() (string, error) {
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
-	return key, err
+	if err != nil {
+		return "", err
+	}
+	return s.box.Open(key)
+}
+
+func (s *AIStore) open(v string) string {
+	out, err := s.box.Open(v)
+	if err != nil {
+		return ""
+	}
+	return out
 }
 
 // SaveConfig saves the AI configuration. If apiKey is empty, the existing key is preserved.
@@ -94,6 +110,7 @@ func (s *AIStore) SaveConfig(provider, apiKey, model string, cap *float64, enabl
 		existing, _ := s.GetRawKey()
 		apiKey = existing
 	}
+	apiKey = s.box.Seal(apiKey)
 
 	_, err := s.db.Exec(
 		`INSERT INTO ai_config (id, provider, api_key_encrypted, model, monthly_cap_usd, enabled, azure_endpoint, updated_at)
@@ -159,8 +176,12 @@ func (s *AIStore) GetCachedAnalysis(runID, question string) (*AIAnalysis, error)
 		return nil, fmt.Errorf("get cached analysis: %w", err)
 	}
 
-	if rID.Valid { a.RunID = &rID.String }
-	if repID.Valid { a.ReportID = &repID.String }
+	if rID.Valid {
+		a.RunID = &rID.String
+	}
+	if repID.Valid {
+		a.ReportID = &repID.String
+	}
 	a.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return &a, nil
 }

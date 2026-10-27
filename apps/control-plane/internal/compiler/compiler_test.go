@@ -54,8 +54,8 @@ func TestCompileFixturePlan(t *testing.T) {
 
 	// Verify imports.
 	checks := []struct {
-		name    string
-		want    string
+		name string
+		want string
 	}{
 		{"http import", "import http from 'k6/http'"},
 		{"check import", "check"},

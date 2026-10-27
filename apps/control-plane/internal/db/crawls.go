@@ -10,7 +10,7 @@ import (
 )
 
 type CrawlAuthConfig struct {
-	Type     string `json:"type"`      // none, form, bearer, basic
+	Type     string `json:"type"` // none, form, bearer, basic
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 	Token    string `json:"token,omitempty"`
@@ -45,24 +45,24 @@ type CapturedRequest struct {
 }
 
 type Crawl struct {
-	ID              string          `json:"id"`
-	EntryURL        string          `json:"entry_url"`
-	Engine          string          `json:"engine"`
-	AuthConfig      CrawlAuthConfig `json:"auth_config"`
-	Depth           int             `json:"depth"`
-	SameOrigin      bool            `json:"same_origin"`
-	Blocklist       []string        `json:"blocklist"`
-	RequestLimit    int             `json:"request_limit"`
-	Status          string          `json:"status"`
-	Progress        CrawlProgress   `json:"progress"`
-	Graph           CrawlGraph      `json:"graph"`
+	ID              string            `json:"id"`
+	EntryURL        string            `json:"entry_url"`
+	Engine          string            `json:"engine"`
+	AuthConfig      CrawlAuthConfig   `json:"auth_config"`
+	Depth           int               `json:"depth"`
+	SameOrigin      bool              `json:"same_origin"`
+	Blocklist       []string          `json:"blocklist"`
+	RequestLimit    int               `json:"request_limit"`
+	Status          string            `json:"status"`
+	Progress        CrawlProgress     `json:"progress"`
+	Graph           CrawlGraph        `json:"graph"`
 	Requests        []CapturedRequest `json:"requests"`
-	OpenAPIURL      string          `json:"openapi_url,omitempty"`
-	OpenAPISpec     string          `json:"openapi_spec,omitempty"`
-	GeneratedPlanID *string         `json:"generated_plan_id,omitempty"`
-	ErrorMessage    string          `json:"error_message,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	OpenAPIURL      string            `json:"openapi_url,omitempty"`
+	OpenAPISpec     string            `json:"openapi_spec,omitempty"`
+	GeneratedPlanID *string           `json:"generated_plan_id,omitempty"`
+	ErrorMessage    string            `json:"error_message,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 type CrawlStore struct {
@@ -157,14 +157,30 @@ func (s *CrawlStore) Get(id string) (*Crawl, error) {
 	json.Unmarshal([]byte(progressStr), &c.Progress)
 	json.Unmarshal([]byte(graphStr), &c.Graph)
 	json.Unmarshal([]byte(requestsStr), &c.Requests)
-	if c.Blocklist == nil { c.Blocklist = []string{} }
-	if c.Graph.Nodes == nil { c.Graph.Nodes = []CrawlGraphNode{} }
-	if c.Graph.Edges == nil { c.Graph.Edges = []CrawlGraphEdge{} }
-	if c.Requests == nil { c.Requests = []CapturedRequest{} }
-	if openapiURL.Valid { c.OpenAPIURL = openapiURL.String }
-	if openapiSpec.Valid { c.OpenAPISpec = openapiSpec.String }
-	if genPlanID.Valid { c.GeneratedPlanID = &genPlanID.String }
-	if errMsg.Valid { c.ErrorMessage = errMsg.String }
+	if c.Blocklist == nil {
+		c.Blocklist = []string{}
+	}
+	if c.Graph.Nodes == nil {
+		c.Graph.Nodes = []CrawlGraphNode{}
+	}
+	if c.Graph.Edges == nil {
+		c.Graph.Edges = []CrawlGraphEdge{}
+	}
+	if c.Requests == nil {
+		c.Requests = []CapturedRequest{}
+	}
+	if openapiURL.Valid {
+		c.OpenAPIURL = openapiURL.String
+	}
+	if openapiSpec.Valid {
+		c.OpenAPISpec = openapiSpec.String
+	}
+	if genPlanID.Valid {
+		c.GeneratedPlanID = &genPlanID.String
+	}
+	if errMsg.Valid {
+		c.ErrorMessage = errMsg.String
+	}
 	c.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	c.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 

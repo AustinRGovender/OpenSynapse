@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
@@ -17,12 +18,12 @@ func NewEnvironmentHandlers(store *db.EnvironmentStore) *EnvironmentHandlers {
 }
 
 type createEnvironmentRequest struct {
-	Name      string              `json:"name"`
+	Name      string                 `json:"name"`
 	Variables map[string]db.Variable `json:"variables"`
 }
 
 type updateEnvironmentRequest struct {
-	Name      string              `json:"name"`
+	Name      string                 `json:"name"`
 	Variables map[string]db.Variable `json:"variables"`
 }
 
@@ -36,7 +37,23 @@ func (h *EnvironmentHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for i := range result.Items {
+		result.Items[i] = *result.Items[i].Redacted()
+	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+var varNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// validateVariables checks names can be referenced as ${NAME} in plans.
+func validateVariables(w http.ResponseWriter, vars map[string]db.Variable) bool {
+	for name := range vars {
+		if !varNameRe.MatchString(name) {
+			badRequest(w, "VALIDATION_ERROR", "Variable name "+strconv.Quote(name)+" must start with a letter or underscore and contain only letters, digits and underscores", map[string]string{"field": "variables"})
+			return false
+		}
+	}
+	return true
 }
 
 func (h *EnvironmentHandlers) Create(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +67,9 @@ func (h *EnvironmentHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "VALIDATION_ERROR", "Environment name is required", map[string]string{"field": "name"})
 		return
 	}
+	if !validateVariables(w, req.Variables) {
+		return
+	}
 
 	env, err := h.store.Create(req.Name, req.Variables)
 	if err != nil {
@@ -57,7 +77,7 @@ func (h *EnvironmentHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, env)
+	writeJSON(w, http.StatusCreated, env.Redacted())
 }
 
 func (h *EnvironmentHandlers) Get(w http.ResponseWriter, r *http.Request) {
@@ -73,9 +93,7 @@ func (h *EnvironmentHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redact secret variable values
-	redacted := redactSecrets(env)
-	writeJSON(w, http.StatusOK, redacted)
+	writeJSON(w, http.StatusOK, env.Redacted())
 }
 
 func (h *EnvironmentHandlers) Update(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +110,10 @@ func (h *EnvironmentHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateVariables(w, req.Variables) {
+		return
+	}
+
 	env, err := h.store.Update(id, req.Name, req.Variables)
 	if err != nil {
 		internalError(w, err)
@@ -102,7 +124,7 @@ func (h *EnvironmentHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, redactSecrets(env))
+	writeJSON(w, http.StatusOK, env.Redacted())
 }
 
 func (h *EnvironmentHandlers) Delete(w http.ResponseWriter, r *http.Request) {
@@ -114,18 +136,4 @@ func (h *EnvironmentHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// redactSecrets returns a copy of the environment with secret values replaced.
-func redactSecrets(env *db.Environment) *db.Environment {
-	redacted := *env
-	redacted.Variables = make(map[string]db.Variable, len(env.Variables))
-	for k, v := range env.Variables {
-		if v.Secret {
-			redacted.Variables[k] = db.Variable{Value: "***REDACTED***", Secret: true}
-		} else {
-			redacted.Variables[k] = v
-		}
-	}
-	return &redacted
 }

@@ -563,19 +563,19 @@ func (rp *runProcess) state(now time.Time) LiveState {
 	defer rp.mu.Unlock()
 	el := rp.elapsed(now)
 	st := LiveState{
-		TargetVUs:       rp.targetVUs,
-		ActiveVUs:       rp.agg.vus(),
-		MaxVUs:          rp.vusMax,
-		RPSTarget:       rp.rpsTarget,
-		Paused:          rp.paused,
-		ManualVUs:       rp.manualVUs,
-		ElapsedSeconds:  int(el.Seconds()),
+		TargetVUs:        rp.targetVUs,
+		ActiveVUs:        rp.agg.vus(),
+		MaxVUs:           rp.vusMax,
+		RPSTarget:        rp.rpsTarget,
+		Paused:           rp.paused,
+		ManualVUs:        rp.manualVUs,
+		ElapsedSeconds:   int(el.Seconds()),
 		RemainingSeconds: -1,
-		MaxDurationSecs: int(rp.spec.MaxDuration.Seconds()),
-		Stopping:        rp.stopRequested,
-		CanControlVUs:   rp.spec.Schedule != nil,
-		CanControlRPS:   rp.spec.ControlURL != "",
-		CanControlDur:   rp.spec.PlannedDuration > 0,
+		MaxDurationSecs:  int(rp.spec.MaxDuration.Seconds()),
+		Stopping:         rp.stopRequested,
+		CanControlVUs:    rp.spec.Schedule != nil,
+		CanControlRPS:    rp.spec.ControlURL != "",
+		CanControlDur:    rp.spec.PlannedDuration > 0,
 	}
 	if rp.plannedEnd > 0 {
 		rem := rp.plannedEnd - el
@@ -842,6 +842,38 @@ func (e *Engine) KillRun(runID string) error {
 	rp.killed = true
 	rp.mu.Unlock()
 	return rp.cmd.Process.Kill()
+}
+
+// ActiveCount is the number of runs executing now.
+func (e *Engine) ActiveCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.active)
+}
+
+// Shutdown kills every running k6 process (on control-plane exit) and waits
+// briefly for their completion callbacks so their status is recorded.
+func (e *Engine) Shutdown(wait time.Duration) {
+	e.mu.Lock()
+	procs := make([]*runProcess, 0, len(e.active))
+	for _, rp := range e.active {
+		procs = append(procs, rp)
+	}
+	e.mu.Unlock()
+	for _, rp := range procs {
+		rp.mu.Lock()
+		rp.killed = true
+		rp.mu.Unlock()
+		rp.cmd.Process.Kill()
+	}
+	deadline := time.After(wait)
+	for _, rp := range procs {
+		select {
+		case <-rp.finished:
+		case <-deadline:
+			return
+		}
+	}
 }
 
 // Wait blocks until the run has finished and its completion callback has run.

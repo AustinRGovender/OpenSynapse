@@ -81,7 +81,7 @@ func TestRunLifecycleWithRealK6(t *testing.T) {
 						"properties": map[string]any{"target": "status", "condition": "equals", "value": 200}, "children": []any{}}}},
 				map[string]any{"id": "bad", "type": "http", "name": "bad", "enabled": true,
 					"properties": map[string]any{"method": "GET", "url": "${TARGET}/fail", "headers": []any{}, "body": map[string]any{"type": "none"}},
-					"children": []any{}},
+					"children":   []any{}},
 				map[string]any{"id": "t", "type": "timer", "name": "think", "enabled": true,
 					"properties": map[string]any{"timer_type": "constant", "duration_ms": 100}, "children": []any{}},
 			},

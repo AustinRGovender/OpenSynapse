@@ -15,13 +15,13 @@ import (
 
 // OpenAPISpec represents a minimal parsed OpenAPI 3.x or Swagger 2.x document.
 type OpenAPISpec struct {
-	OpenAPI string                        `json:"openapi"`
-	Swagger string                        `json:"swagger"`
-	Info    struct{ Title, Version string } `json:"info"`
-	Paths   map[string]map[string]Operation `json:"paths"`
-	Servers []struct{ URL string }         `json:"servers"`
-	Host    string                         `json:"host"`    // Swagger 2
-	BasePath string                        `json:"basePath"` // Swagger 2
+	OpenAPI  string                          `json:"openapi"`
+	Swagger  string                          `json:"swagger"`
+	Info     struct{ Title, Version string } `json:"info"`
+	Paths    map[string]map[string]Operation `json:"paths"`
+	Servers  []struct{ URL string }          `json:"servers"`
+	Host     string                          `json:"host"`     // Swagger 2
+	BasePath string                          `json:"basePath"` // Swagger 2
 }
 
 type Operation struct {
@@ -41,7 +41,7 @@ type Parameter struct {
 	In       string `json:"in"` // query, path, header
 	Required bool   `json:"required"`
 	Schema   struct {
-		Type    string `json:"type"`
+		Type    string      `json:"type"`
 		Default interface{} `json:"default"`
 		Example interface{} `json:"example"`
 	} `json:"schema"`

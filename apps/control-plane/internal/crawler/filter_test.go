@@ -95,10 +95,10 @@ func TestShouldVisit(t *testing.T) {
 		want      bool
 	}{
 		{"https://example.com/page", 0, true},
-		{"https://other.com/page", 0, false},   // cross-origin
+		{"https://other.com/page", 0, false},     // cross-origin
 		{"https://example.com/logout", 0, false}, // blocked
-		{"https://example.com/page", 100, false},  // at limit
-		{"", 0, false},                            // empty
+		{"https://example.com/page", 100, false}, // at limit
+		{"", 0, false},                           // empty
 	}
 
 	for _, tt := range tests {

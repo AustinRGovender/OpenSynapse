@@ -10,6 +10,8 @@ import (
 
 type PlanHandlers struct {
 	store *db.PlanStore
+	// Settings, if set, supplies the default environment for new plans.
+	Settings *db.SettingsStore
 }
 
 func NewPlanHandlers(store *db.PlanStore) *PlanHandlers {
@@ -57,6 +59,11 @@ func (h *PlanHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.DefaultEnvironmentID == nil && h.Settings != nil {
+		if st, err := h.Settings.Get(); err == nil && st.General.DefaultEnvironmentID != "" {
+			req.DefaultEnvironmentID = &st.General.DefaultEnvironmentID
+		}
+	}
 	plan, err := h.store.Create(req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID, false)
 	if err != nil {
 		internalError(w, err)
