@@ -4,11 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"sort"
+	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/crawler"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 )
+
+func sortedKeys(values url.Values) []string {
+	keys := make([]string, 0, len(values))
+	for k := range values {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 type CrawlHandlers struct {
 	crawls       *db.CrawlStore
@@ -22,13 +35,13 @@ func NewCrawlHandlers(crawls *db.CrawlStore, plans *db.PlanStore) *CrawlHandlers
 
 type startCrawlRequest struct {
 	EntryURL   string             `json:"entry_url"`
-	Engine     string             `json:"engine"`
-	Auth       db.CrawlAuthConfig `json:"auth"`
-	Depth      int                `json:"depth"`
+	Engine     string             `json:"engine,omitempty"`
+	Auth       db.CrawlAuthConfig `json:"auth,omitempty"`
+	Depth      int                `json:"depth,omitempty"`
 	SameOrigin *bool              `json:"same_origin"`
-	Blocklist  []string           `json:"blocklist"`
-	Limit      int                `json:"limit"`
-	OpenAPIURL string             `json:"openapi_url"`
+	Blocklist  []string           `json:"blocklist,omitempty"`
+	Limit      int                `json:"limit,omitempty"`
+	OpenAPIURL string             `json:"openapi_url,omitempty"`
 }
 
 func (h *CrawlHandlers) Start(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +250,12 @@ func (h *CrawlHandlers) GeneratePlan(w http.ResponseWriter, r *http.Request) {
 	if crawl.OpenAPISpec != "" {
 		var spec crawler.OpenAPISpec
 		json.Unmarshal([]byte(crawl.OpenAPISpec), &spec)
-		plan = crawler.GeneratePlanFromOpenAPI(&spec, crawl.EntryURL)
+		specURL := crawl.OpenAPIURL
+		if specURL == "" {
+			specURL = crawl.EntryURL
+		}
+		// The entry URL of an import is the document itself, not the API's base.
+		plan = crawler.GeneratePlanFromOpenAPI(&spec, crawler.ResolveBaseURL(&spec, specURL))
 	} else {
 		// Generate plan from captured requests
 		plan = generatePlanFromRequests(crawl)
@@ -255,22 +273,70 @@ func (h *CrawlHandlers) GeneratePlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, savedPlan)
 }
 
+// generatePlanFromRequests turns captured requests into one HTTP node per
+// unique method and URL, in the order they were first seen.
 func generatePlanFromRequests(crawl *db.Crawl) *db.Plan {
 	var samplers []db.Node
+	seen := map[string]bool{}
 	for _, req := range crawl.Requests {
-		bodyJSON, _ := json.Marshal(map[string]interface{}{"type": "none"})
+		key := req.Method + " " + req.URL
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		body := map[string]interface{}{"type": "none"}
+		var headers []map[string]interface{}
+		if req.Body != "" {
+			rawType := ""
+			for k, v := range req.Headers {
+				if strings.EqualFold(k, "Content-Type") {
+					rawType = v
+				}
+			}
+			contentType := strings.ToLower(rawType)
+			switch {
+			case strings.Contains(contentType, "json"):
+				body = map[string]interface{}{"type": "json", "content": req.Body}
+			case strings.Contains(contentType, "x-www-form-urlencoded") || contentType == "":
+				if values, err := url.ParseQuery(req.Body); err == nil && len(values) > 0 {
+					fields := []map[string]string{}
+					for _, k := range sortedKeys(values) {
+						for _, v := range values[k] {
+							fields = append(fields, map[string]string{"key": k, "value": v})
+						}
+					}
+					body = map[string]interface{}{"type": "form", "form_fields": fields}
+				} else {
+					body = map[string]interface{}{"type": "raw", "content": req.Body}
+				}
+			default:
+				body = map[string]interface{}{"type": "raw", "content": req.Body}
+				headers = append(headers, map[string]interface{}{"key": "Content-Type", "value": rawType, "enabled": true})
+			}
+		}
+		if headers == nil {
+			headers = []map[string]interface{}{}
+		}
 		propsJSON, _ := json.Marshal(map[string]interface{}{
 			"method":           req.Method,
 			"url":              req.URL,
-			"headers":          []interface{}{},
-			"body":             json.RawMessage(bodyJSON),
+			"headers":          headers,
+			"body":             body,
 			"follow_redirects": true,
 		})
 
+		name := req.URL
+		if u, err := url.Parse(req.URL); err == nil && u.Path != "" {
+			name = u.Path
+			if u.RawQuery != "" {
+				name += "?" + u.RawQuery
+			}
+		}
 		samplers = append(samplers, db.Node{
-			ID:         "req-" + req.Method + "-" + req.URL,
+			ID:         uuid.NewString(),
 			Type:       "http",
-			Name:       req.Method + " " + req.URL,
+			Name:       req.Method + " " + name,
 			Enabled:    true,
 			Properties: propsJSON,
 			Children:   []db.Node{},
@@ -278,7 +344,7 @@ func generatePlanFromRequests(crawl *db.Crawl) *db.Plan {
 	}
 
 	scenario := db.Node{
-		ID:         "scenario-crawl",
+		ID:         uuid.NewString(),
 		Type:       "scenario",
 		Name:       "Crawl Scenario",
 		Enabled:    true,
@@ -287,7 +353,7 @@ func generatePlanFromRequests(crawl *db.Crawl) *db.Plan {
 	}
 
 	root := db.Node{
-		ID:         "root-crawl",
+		ID:         uuid.NewString(),
 		Type:       "plan",
 		Name:       "Crawl: " + crawl.EntryURL,
 		Enabled:    true,

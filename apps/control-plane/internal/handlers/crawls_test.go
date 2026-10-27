@@ -3,8 +3,12 @@ package handlers_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/testutil"
 )
@@ -204,4 +208,116 @@ func TestCrawlMissingURL(t *testing.T) {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+// An OpenAPI import of a YAML document generates requests against the API's
+// server (the one on the document's host), with examples filled in.
+func TestCrawlOpenAPIImportYAMLGeneratesRunnablePlan(t *testing.T) {
+	var api *httptest.Server
+	api = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		fmt.Fprintf(w, `openapi: 3.0.3
+info:
+  title: Shop
+  version: "1"
+servers:
+  - url: http://localhost:9002
+  - url: %s
+paths:
+  /products/{id}:
+    get:
+      summary: Get product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: p1
+      responses:
+        200:
+          description: ok
+  /orders:
+    post:
+      summary: Create order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewOrder'
+      responses:
+        201:
+          description: created
+components:
+  schemas:
+    NewOrder:
+      type: object
+      properties:
+        product_ids:
+          type: array
+          items:
+            type: string
+          example: ["p1", "p2"]
+`, api.URL)
+	}))
+	defer api.Close()
+
+	ts := testutil.NewTestServer(t)
+	body := fmt.Sprintf(`{"openapi_url":%q}`, api.URL+"/openapi.yaml")
+	req, _ := http.NewRequest("POST", ts.URL()+"/api/v1/crawls", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := ts.Do(req)
+	var created struct{ ID string }
+	json.NewDecoder(resp.Body).Decode(&created)
+	resp.Body.Close()
+
+	var crawl struct {
+		Status       string
+		ErrorMessage string `json:"error_message"`
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		req, _ = http.NewRequest("GET", ts.URL()+"/api/v1/crawls/"+created.ID, nil)
+		resp = ts.Do(req)
+		json.NewDecoder(resp.Body).Decode(&crawl)
+		resp.Body.Close()
+		if crawl.Status != "pending" && crawl.Status != "crawling" {
+			break
+		}
+	}
+	if crawl.Status != "completed" {
+		t.Fatalf("import status %q (%s), want completed", crawl.Status, crawl.ErrorMessage)
+	}
+
+	req, _ = http.NewRequest("POST", ts.URL()+"/api/v1/crawls/"+created.ID+"/generate-plan", nil)
+	resp = ts.Do(req)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("generate-plan: got %d", resp.StatusCode)
+	}
+	var plan struct {
+		Root struct {
+			Children []struct {
+				Children []struct {
+					Properties struct {
+						Method string
+						URL    string
+						Body   struct{ Type, Content string }
+					}
+				}
+			}
+		}
+	}
+	json.NewDecoder(resp.Body).Decode(&plan)
+	resp.Body.Close()
+
+	got := map[string]string{}
+	for _, n := range plan.Root.Children[0].Children {
+		got[n.Properties.Method+" "+n.Properties.URL] = n.Properties.Body.Content
+	}
+	if _, ok := got["GET "+api.URL+"/products/p1"]; !ok {
+		t.Errorf("GET request should use the document host and the path example; got %v", got)
+	}
+	orderBody, ok := got["POST "+api.URL+"/orders"]
+	if !ok || !strings.Contains(orderBody, `"p2"`) {
+		t.Errorf("POST /orders should carry an example body from the $ref schema; got %v", got)
+	}
 }

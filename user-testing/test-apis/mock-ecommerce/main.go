@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"sync"
@@ -8,6 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+//go:embed openapi.yaml
+var openAPISpec []byte
 
 type Product struct {
 	ID    string  `json:"id"`
@@ -49,6 +53,11 @@ func init() {
 
 func main() {
 	router := gin.Default()
+
+	// The API description, for OpenSynapse's OpenAPI import.
+	router.GET("/openapi.yaml", func(c *gin.Context) {
+		c.Data(200, "application/yaml", openAPISpec)
+	})
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy", "service": "Mock E-commerce API"})
