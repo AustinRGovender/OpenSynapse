@@ -435,6 +435,7 @@ kbd {
     <a href="#comparing-runs">Comparing Runs</a>
     <a href="#playground">Endpoint Playground</a>
     <a href="#crawler">Crawler &amp; OpenAPI Import</a>
+    <a href="#user-testing">User Testing</a>
     <a href="#ai-analysis">AI Analysis</a>
     <a href="#templates-fragments">Templates &amp; Fragments</a>
     <a href="#import-export">Import &amp; Export</a>
@@ -968,6 +969,102 @@ docker compose up -d</code></pre>
   <li>Changed response shapes</li>
 </ul>
 <p>Choose which changes to merge into your existing plan.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: User Testing -->
+<!-- ============================================================ -->
+<section id="user-testing">
+<h2>User Testing</h2>
+<p>OpenSynapse ships with <strong>4 test APIs</strong> and <strong>6 built-in seed plans</strong> so you can explore every feature hands-on without needing your own target application.</p>
+
+<h3>Test APIs</h3>
+<div class="card-grid">
+  <div class="card">
+    <h4>Echo API <code>:9001</code></h4>
+    <p>Health checks, echo responses, configurable delays, and arbitrary status codes.</p>
+    <p><code>/health</code> &middot; <code>/echo</code> &middot; <code>/delay/:ms</code> &middot; <code>/status/:code</code></p>
+  </div>
+  <div class="card">
+    <h4>Mock E-commerce <code>:9002</code></h4>
+    <p>Product catalogue, product detail, and order placement.</p>
+    <p><code>/health</code> &middot; <code>/products</code> &middot; <code>/products/:id</code> &middot; <code>/orders</code> &middot; <code>/orders/latest</code></p>
+  </div>
+  <div class="card">
+    <h4>Slow API <code>:9003</code></h4>
+    <p>Configurable latency and intermittent failures for stress testing.</p>
+    <p><code>/health</code> &middot; <code>/slow/:seconds</code> &middot; <code>/flaky</code></p>
+  </div>
+  <div class="card">
+    <h4>Error API <code>:9004</code></h4>
+    <p>Random errors, rate limiting, and progressive degradation.</p>
+    <p><code>/health</code> &middot; <code>/random-error</code> &middot; <code>/rate-limit</code> &middot; <code>/degradation</code></p>
+  </div>
+</div>
+
+<h3>Starting the Test APIs</h3>
+<ol class="steps">
+  <li>Navigate to the <code>user-testing/</code> directory in the OpenSynapse repository.</li>
+  <li>Run <code>docker compose up -d</code> to start all four APIs.</li>
+  <li>Verify they are running: <code>curl http://localhost:9001/health</code> should return a 200 response.</li>
+</ol>
+
+<div class="callout-info">
+  <strong>Docker hostnames vs localhost:</strong> The seed plans use Docker service names (e.g. <code>echo-api:9001</code>) as hostnames. When running tests from the Docker-based control plane, these resolve automatically. If you run the control plane outside Docker, update the plan URLs to use <code>localhost</code> instead.
+</div>
+
+<h3>Running Without Docker</h3>
+<p>Each test API is a standalone Go binary. From each API's directory, run:</p>
+<pre><code>go run main.go</code></pre>
+<p>The APIs start on their default ports (9001&ndash;9004). No external dependencies required.</p>
+
+<h3>Seed Plans</h3>
+<table>
+  <thead>
+    <tr><th>Plan Name</th><th>Type</th><th>Target API</th><th>VUs</th><th>Duration</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Echo API &mdash; Smoke Test</td><td>Smoke</td><td>Echo API</td><td>1</td><td>30s</td></tr>
+    <tr><td>E-commerce &mdash; Browse &amp; Buy</td><td>Load</td><td>Mock E-commerce</td><td>10&ndash;50</td><td>14m</td></tr>
+    <tr><td>Slow API &mdash; Stress Test</td><td>Stress</td><td>Slow API</td><td>5&ndash;100</td><td>8m</td></tr>
+    <tr><td>Error API &mdash; Resilience Test</td><td>Resilience</td><td>Error API</td><td>10</td><td>2m</td></tr>
+    <tr><td>Cross-API &mdash; Spike Test</td><td>Spike</td><td>All 4 APIs</td><td>5&ndash;100</td><td>~3m</td></tr>
+    <tr><td>Echo API &mdash; Delay Validation</td><td>Validation</td><td>Echo API</td><td>5</td><td>1m</td></tr>
+  </tbody>
+</table>
+
+<div class="callout-tip">
+  Seed plans are fully editable &mdash; customise them to match your testing needs. They cannot be deleted, so they're always available as starting points.
+</div>
+
+<h3>Running Your First Seed Plan</h3>
+<ol class="steps">
+  <li>Start the test APIs using the instructions above.</li>
+  <li>Open OpenSynapse and navigate to <strong>Plans</strong>.</li>
+  <li>Select <strong>Echo API &mdash; Smoke Test</strong> (the simplest plan).</li>
+  <li>Click <strong>Run</strong> to start the test.</li>
+  <li>Watch live metrics on the dashboard as the test executes.</li>
+  <li>When the test finishes, review the results: response times, error rates, and assertion pass/fail counts.</li>
+</ol>
+
+<h3>What the Plans Demonstrate</h3>
+<ul>
+  <li><strong>Status assertions</strong> &mdash; verify HTTP status codes (200, 201, 418, 503)</li>
+  <li><strong>Body assertions</strong> &mdash; check response content contains expected strings</li>
+  <li><strong>Timing assertions</strong> &mdash; validate response times fall within expected ranges</li>
+  <li><strong>Negated assertions</strong> &mdash; confirm an error status does <em>not</em> occur (e.g. not-500)</li>
+  <li><strong>Timer types</strong> &mdash; constant, uniform random, and Gaussian think times</li>
+  <li><strong>Ramping VUs</strong> &mdash; gradually increase load to find breaking points</li>
+  <li><strong>Cross-API scenarios</strong> &mdash; hit multiple services in a single test</li>
+</ul>
+
+<h3>Customising Plans</h3>
+<ol class="steps">
+  <li>Open a seed plan and click <strong>Edit in Builder</strong>.</li>
+  <li>Modify request parameters, add or remove assertions, adjust VU counts, or change timer durations.</li>
+  <li>Save your changes &mdash; the plan updates in place with a new version.</li>
+  <li>Run the customised plan to see your changes in action.</li>
+</ol>
 </section>
 
 <!-- ============================================================ -->

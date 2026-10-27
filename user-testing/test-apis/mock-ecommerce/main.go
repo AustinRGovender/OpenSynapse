@@ -23,10 +23,15 @@ type Order struct {
 	Status     string   `json:"status"`
 }
 
+// maxOrders bounds the in-memory order store so long soak tests don't grow
+// memory without limit; the oldest orders are evicted first.
+const maxOrders = 10000
+
 var (
-	products = make(map[string]Product)
-	orders   = make(map[string]Order)
-	mu       sync.RWMutex
+	products   = make(map[string]Product)
+	orders     = make(map[string]Order)
+	orderQueue []string
+	mu         sync.RWMutex
 )
 
 func init() {
@@ -98,8 +103,25 @@ func main() {
 			Status:     "pending",
 		}
 		orders[order.ID] = order
+		orderQueue = append(orderQueue, order.ID)
+		if len(orderQueue) > maxOrders {
+			delete(orders, orderQueue[0])
+			orderQueue = orderQueue[1:]
+		}
 
 		c.JSON(201, order)
+	})
+
+	// The most recently placed order. Registered before /orders/:id; gin
+	// resolves the static segment ahead of the parameter.
+	router.GET("/orders/latest", func(c *gin.Context) {
+		mu.RLock()
+		defer mu.RUnlock()
+		if len(orderQueue) == 0 {
+			c.JSON(404, gin.H{"error": "No orders yet"})
+			return
+		}
+		c.JSON(200, orders[orderQueue[len(orderQueue)-1]])
 	})
 
 	router.GET("/orders/:id", func(c *gin.Context) {

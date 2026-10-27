@@ -98,11 +98,7 @@ func (h *PlanHandlers) Update(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.store.Update(id, req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID)
 	if err != nil {
-		if err.Error() == "cannot modify built-in plan" {
-			writeError(w, http.StatusForbidden, "CANNOT_MODIFY_BUILTIN", err.Error(), nil)
-		} else {
-			internalError(w, err)
-		}
+		internalError(w, err)
 		return
 	}
 	if plan == nil {

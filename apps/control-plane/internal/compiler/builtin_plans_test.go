@@ -92,7 +92,9 @@ func TestBuiltInPlanSmokeCompileContent(t *testing.T) {
 		"http.post('http://echo-api:9001/echo'",
 		"http.get('http://echo-api:9001/delay/100')",
 		"group('Echo Flow'",
-		"sleep(0.500)",
+		"check(",
+		"r.status === 200",
+		"r.timings.duration < 500",
 	}
 
 	for _, want := range checks {
@@ -142,6 +144,9 @@ func TestBuiltInPlanRampingCompileContent(t *testing.T) {
 		"target: 0",
 		"http.get('http://mock-ecommerce:9002/products')",
 		"http.post('http://mock-ecommerce:9002/orders'",
+		"check(",
+		"r.status === 200",
+		"r.status === 201",
 	}
 
 	for _, want := range checks {
