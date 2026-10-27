@@ -19,7 +19,7 @@ controlPlane:
   # Extra Host header values the API answers to; the services' DNS names and
   # ingress hosts are added automatically.
   allowedHosts: []
-  logFormat: json
+  logFormat: json   # or text
   resources:
     requests:
       cpu: 100m

@@ -6,17 +6,17 @@ OpenSynapse is a self-hosted performance testing platform combining k6 scripting
 
 | Layer            | Choice                                    |
 | ---------------- | ----------------------------------------- |
-| Control plane    | Go 1.22+                                  |
-| Web app          | React 18 + TypeScript + Vite              |
+| Control plane    | Go 1.26+                                  |
+| Web app          | React 19 + TypeScript + Vite (ADR-0001)   |
 | Desktop shell    | Tauri 2                                   |
 | Load engine      | k6 with xk6-kv (do not substitute)        |
-| Desktop DB       | SQLite + Parquet                           |
-| Cluster DB       | Postgres + S3-compatible (MinIO)           |
+| Desktop DB       | SQLite; raw samples as gzip JSON (ADR-0010) |
+| Cluster DB       | Postgres + S3-compatible (RustFS bundled; ADR-0012) |
 | UI components    | shadcn/ui + Tailwind                       |
 | Charts           | Recharts                                   |
 | Plan graph       | React Flow                                 |
 | State            | Zustand + TanStack Query                   |
-| Routing          | TanStack Router                            |
+| Routing          | Hash router (ADR-0004)                     |
 | Crawler          | Rod, Colly, OWASP ZAP (see ADR-0003)       |
 | Orchestration    | k6-operator                                |
 | CI               | GitHub Actions                             |
