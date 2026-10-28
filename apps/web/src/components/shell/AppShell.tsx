@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import logoUrl from '../../assets/logo.png'
 import { useAuthStore } from '../../stores/auth-store'
 import { useUIStore } from '../../stores/ui-store'
 
@@ -26,7 +27,7 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
     <div className="flex h-full flex-col bg-slate-950 text-slate-100">
       <header className="flex h-12 shrink-0 items-center gap-4 border-b border-slate-800 px-4">
         <a href="#/plans" className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-100">
-          <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm bg-teal-500" />
+          <img src={logoUrl} alt="" aria-hidden className="h-6 w-6" />
           OpenSynapse
         </a>
         <nav aria-label="Main" className="flex items-center gap-0.5 overflow-x-auto">
