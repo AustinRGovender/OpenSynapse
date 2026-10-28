@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -56,6 +57,42 @@ func TestCrawlStartAndGet(t *testing.T) {
 	}
 	if fetched["engine"] != "rod" {
 		t.Fatalf("expected engine 'rod', got %v", fetched["engine"])
+	}
+}
+
+// A crawl's password and token are used while it runs but never returned.
+func TestCrawlDoesNotReturnCredentials(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	for _, auth := range []string{
+		`{"type":"form_login","username":"demo","password":"s3cret-pass"}`,
+		`{"type":"bearer","token":"s3cret-token"}`,
+	} {
+		body := `{"entry_url":"http://127.0.0.1:1/","engine":"colly","depth":1,"auth":` + auth + `}`
+		req, _ := http.NewRequest("POST", ts.URL()+"/api/v1/crawls", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp := ts.Do(req)
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("start: expected 201, got %d: %s", resp.StatusCode, raw)
+		}
+		var created map[string]interface{}
+		json.Unmarshal(raw, &created)
+
+		req, _ = http.NewRequest("GET", ts.URL()+"/api/v1/crawls/"+created["id"].(string), nil)
+		resp = ts.Do(req)
+		fetched, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		for _, out := range [][]byte{raw, fetched} {
+			if bytes.Contains(out, []byte("s3cret")) {
+				t.Fatalf("crawl response contains a credential: %s", out)
+			}
+		}
+		if !bytes.Contains(fetched, []byte(`"type":`)) {
+			t.Fatalf("expected the auth type to be kept: %s", fetched)
+		}
 	}
 }
 

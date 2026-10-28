@@ -16,6 +16,13 @@ type CrawlAuthConfig struct {
 	Token    string `json:"token,omitempty"`
 }
 
+// withoutSecrets drops the password and token. A crawl uses them only while
+// it runs, so they are never stored or returned by the API.
+func (a CrawlAuthConfig) withoutSecrets() CrawlAuthConfig {
+	a.Password, a.Token = "", ""
+	return a
+}
+
 type CrawlProgress struct {
 	PagesDiscovered  int `json:"pages_discovered"`
 	RequestsCaptured int `json:"requests_captured"`
@@ -84,6 +91,7 @@ func (s *CrawlStore) Create(entryURL, engine string, auth CrawlAuthConfig, depth
 		blocklist = []string{}
 	}
 
+	auth = auth.withoutSecrets()
 	authJSON, _ := json.Marshal(auth)
 	blocklistJSON, _ := json.Marshal(blocklist)
 	progressJSON, _ := json.Marshal(CrawlProgress{})
@@ -153,6 +161,7 @@ func (s *CrawlStore) Get(id string) (*Crawl, error) {
 
 	c.SameOrigin = sameOriginInt == 1
 	json.Unmarshal([]byte(authStr), &c.AuthConfig)
+	c.AuthConfig = c.AuthConfig.withoutSecrets() // rows saved before secrets were dropped
 	json.Unmarshal([]byte(blocklistStr), &c.Blocklist)
 	json.Unmarshal([]byte(progressStr), &c.Progress)
 	json.Unmarshal([]byte(graphStr), &c.Graph)
