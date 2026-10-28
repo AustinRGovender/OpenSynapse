@@ -20,7 +20,11 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(docker run:*)",
-      "Bash(curl -s http://localhost:8080/api/v1/runs/eeb923d6-e7a5-4218-89f3-c2eb15c23db6)"
+      "Bash(curl -s http://localhost:8080/api/v1/runs/eeb923d6-e7a5-4218-89f3-c2eb15c23db6)",
+      "Bash(cp -r \"C:/Users/austi/OneDrive/Desktop/IHAPerf/IHAPerf/test-apis/echo-api\" \"C:/Users/austi/OneDrive/Desktop/dev/opensynapse/user-testing/test-apis/\")",
+      "Bash(cp -r \"C:/Users/austi/OneDrive/Desktop/IHAPerf/IHAPerf/test-apis/mock-ecommerce\" \"C:/Users/austi/OneDrive/Desktop/dev/opensynapse/user-testing/test-apis/\")",
+      "Bash(cp -r \"C:/Users/austi/OneDrive/Desktop/IHAPerf/IHAPerf/test-apis/slow-api\" \"C:/Users/austi/OneDrive/Desktop/dev/opensynapse/user-testing/test-apis/\")",
+      "Bash(cp -r \"C:/Users/austi/OneDrive/Desktop/IHAPerf/IHAPerf/test-apis/error-api\" \"C:/Users/austi/OneDrive/Desktop/dev/opensynapse/user-testing/test-apis/\")"
     ]
   }
 }
