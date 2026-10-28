@@ -38,6 +38,12 @@ GET http://localhost:9003/flaky
 - Simulate network latency
 - Test load balancer behavior with slow backends
 
+### OpenAPI document
+```bash
+GET http://localhost:9003/openapi.yaml
+# Import it in the Crawler to draft a plan
+```
+
 ## Running
 
 ```bash

@@ -51,6 +51,33 @@ func init() {
 	}
 }
 
+// placeOrder records an order for the given products (used by the API and the shop).
+func placeOrder(productIDs []string) Order {
+	mu.Lock()
+	defer mu.Unlock()
+
+	total := 0.0
+	for _, pid := range productIDs {
+		if p, ok := products[pid]; ok {
+			total += p.Price
+		}
+	}
+
+	order := Order{
+		ID:         uuid.New().String(),
+		ProductIDs: productIDs,
+		Total:      total,
+		Status:     "pending",
+	}
+	orders[order.ID] = order
+	orderQueue = append(orderQueue, order.ID)
+	if len(orderQueue) > maxOrders {
+		delete(orders, orderQueue[0])
+		orderQueue = orderQueue[1:]
+	}
+	return order
+}
+
 func main() {
 	router := gin.Default()
 
@@ -58,6 +85,9 @@ func main() {
 	router.GET("/openapi.yaml", func(c *gin.Context) {
 		c.Data(200, "application/yaml", openAPISpec)
 	})
+
+	// An HTML storefront for crawler testing (shop.go).
+	registerShop(router)
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy", "service": "Mock E-commerce API"})
@@ -95,30 +125,7 @@ func main() {
 			return
 		}
 
-		mu.Lock()
-		defer mu.Unlock()
-
-		total := 0.0
-		for _, pid := range req.ProductIDs {
-			if p, ok := products[pid]; ok {
-				total += p.Price
-			}
-		}
-
-		order := Order{
-			ID:         uuid.New().String(),
-			ProductIDs: req.ProductIDs,
-			Total:      total,
-			Status:     "pending",
-		}
-		orders[order.ID] = order
-		orderQueue = append(orderQueue, order.ID)
-		if len(orderQueue) > maxOrders {
-			delete(orders, orderQueue[0])
-			orderQueue = orderQueue[1:]
-		}
-
-		c.JSON(201, order)
+		c.JSON(201, placeOrder(req.ProductIDs))
 	})
 
 	// The most recently placed order. Registered before /orders/:id; gin

@@ -23,11 +23,12 @@ Open `http://localhost:8080` to access the web UI. Six built-in test plans are p
 | API | Port | Purpose | Key Endpoints |
 |-----|------|---------|---------------|
 | echo-api | 9001 | Basic echo, delay, and status code simulation | `GET /health`, `POST /echo`, `GET /delay/:ms`, `GET /status/:code` |
-| mock-ecommerce | 9002 | Multi-step e-commerce user journey | `GET /products`, `GET /products/:id`, `POST /orders`, `GET /orders/:id` |
+| mock-ecommerce | 9002 | Multi-step e-commerce user journey, plus an HTML storefront for the crawler | `GET /products`, `GET /products/:id`, `POST /orders`, `GET /orders/:id`, `GET /shop` |
 | slow-api | 9003 | Configurable slow responses and flaky behavior | `GET /slow/:seconds`, `GET /timeout`, `GET /flaky` |
 | error-api | 9004 | Error rate, rate limiting, and degradation simulation | `GET /random-error`, `GET /rate-limit`, `GET /degradation` |
 
-Each API includes an OpenAPI spec at `test-apis/<api>/openapi.yaml`.
+Each API has an OpenAPI document at `test-apis/<api>/openapi.yaml` and serves it at
+`/openapi.yaml`, so the Crawler can import it.
 
 ## Built-In Plans
 
@@ -40,11 +41,12 @@ The following plans are seeded on startup and appear in the plan list:
 5. **Cross-API -- Spike Test** - Sudden burst across all APIs (spike 5-100-5 VUs)
 6. **Echo API -- Delay Validation** - Validate response time accuracy (5 VUs, 1m)
 
-Built-in plans cannot be modified or deleted. They use Docker service hostnames (e.g., `http://echo-api:9001`), which resolve inside the Docker network.
+Built-in plans can be edited like any other plan. Under Docker they use the service
+hostnames (e.g., `http://echo-api:9001`), which resolve inside the Docker network.
 
 ## Running Without Docker
 
-To run the test APIs directly (requires Go 1.22+):
+To run the test APIs directly (requires Go 1.26+):
 
 ```bash
 cd test-apis/echo-api && go run main.go &
@@ -53,7 +55,8 @@ cd test-apis/slow-api && go run main.go &
 cd test-apis/error-api && go run main.go &
 ```
 
-When running outside Docker, the built-in plans reference Docker hostnames. Create your own plans with `localhost` URLs, or modify the plan URLs before running.
+A control plane running outside Docker points the built-in plans at `localhost` instead.
+Set `OPENSYNAPSE_TEST_APIS=docker` or `localhost` to choose explicitly.
 
 ## Verifying Connectivity
 
@@ -63,3 +66,20 @@ curl localhost:9002/products
 curl localhost:9003/slow/1
 curl localhost:9004/random-error
 ```
+
+## Trying the Crawler
+
+All four APIs serve their OpenAPI document, and the e-commerce API has an HTML storefront
+at `/shop` built for the website crawler. In OpenSynapse open **Crawler** and try:
+
+| What to test | Start URL | Engine | Authentication |
+|---|---|---|---|
+| OpenAPI import | `http://mock-ecommerce:9002/openapi.yaml` (or `echo-api:9001`, `slow-api:9003`, `error-api:9004`) | Import OpenAPI | none |
+| Plain HTML crawl | `http://mock-ecommerce:9002/shop` | Colly | none |
+| JavaScript-built links | `http://mock-ecommerce:9002/shop` | Rod | none |
+| Form login (username) | `http://mock-ecommerce:9002/shop/login` | Colly or Rod | Form login: `demo` / `demo-pass` |
+| Form login (email) | `http://mock-ecommerce:9002/shop/login-email` | Colly or Rod | Form login: `demo@example.com` / `demo-pass` |
+| Basic auth | `http://mock-ecommerce:9002/shop/staff` | Colly or Rod | Basic: `demo` / `demo-pass` |
+
+See `test-apis/mock-ecommerce/README.md` for what each page tests, and section 11 of
+`docs/user/HOW-TO.md` for what each crawl should find.

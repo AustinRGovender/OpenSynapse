@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"math/rand"
@@ -10,8 +11,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+//go:embed openapi.yaml
+var openAPISpec []byte
+
 func main() {
 	router := gin.Default()
+
+	// The API description, for OpenSynapse's OpenAPI import.
+	router.GET("/openapi.yaml", func(c *gin.Context) {
+		c.Data(200, "application/yaml", openAPISpec)
+	})
 	rand.Seed(time.Now().UnixNano())
 
 	router.GET("/health", func(c *gin.Context) {

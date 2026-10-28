@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"strconv"
@@ -9,8 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+//go:embed openapi.yaml
+var openAPISpec []byte
+
 func main() {
 	router := gin.Default()
+
+	// The API description, for OpenSynapse's OpenAPI import.
+	router.GET("/openapi.yaml", func(c *gin.Context) {
+		c.Data(200, "application/yaml", openAPISpec)
+	})
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
