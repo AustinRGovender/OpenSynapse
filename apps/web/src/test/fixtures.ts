@@ -1,5 +1,5 @@
 // Sample data shaped like the API's responses, for stories and tests.
-import type { CheckStat, EndpointStat, Environment, Fragment, LiveState, MetricPoint, Plan, Run, RunError, RunEvent, Settings } from '@opensynapse/api-client'
+import type { CheckStat, Crawl, EndpointStat, Environment, Fragment, LiveState, MetricPoint, Plan, Run, RunError, RunEvent, Settings } from '@opensynapse/api-client'
 import type { MockRoutes } from './mock-api'
 
 const t0 = Date.UTC(2026, 9, 27, 12, 0, 0)
@@ -150,6 +150,51 @@ export const live: LiveState = {
   workers: 1,
   starting: false,
 }
+
+// A Rod crawl of the test shop: every page links back to the navigation, and
+// the order page was reached by the checkout form's redirect, not a link.
+const shop = 'http://mock-ecommerce:9002/shop'
+const shopNav = ['', '/products', '/cart', '/app', '/about', '/login']
+const shopPages: [path: string, title: string, links: string[], status?: number][] = [
+  ['', 'Home', ['/staff', '/account/delete']],
+  ['/products', 'Products', ['/products/p1', '/products/p2', '/products/p3', '/products/p4', '/products?page=2']],
+  ['/products?page=2', 'Products', ['/products/p5', '/products']],
+  ['/products/p1', 'Laptop', ['/products']],
+  ['/products/p2', 'Mouse', ['/products']],
+  ['/products/p3', 'Keyboard', ['/products']],
+  ['/products/p4', 'Monitor', ['/products']],
+  ['/products/p5', 'USB-C hub', ['/products']],
+  ['/cart', 'Cart', ['/products']],
+  ['/app', 'Deals', ['/products/p2']],
+  ['/about', 'About', []],
+  ['/login', 'Log in', ['/login-email']],
+  ['/login-email', 'Log in', ['/login']],
+  ['/staff', 'Staff area', [], 401],
+  ['/orders/o-1001', 'Order o-1001', ['']],
+]
+
+export const shopCrawl: Crawl = {
+  id: 'crawl-1',
+  entry_url: shop,
+  engine: 'rod',
+  status: 'completed',
+  depth: 3,
+  same_origin: true,
+  blocklist: ['/logout', '/delete'],
+  request_limit: 500,
+  auth_config: { type: '' },
+  progress: { pages_discovered: shopPages.length, requests_captured: shopPages.length + 1 },
+  graph: {
+    nodes: shopPages.map(([path, title]) => ({ url: shop + path, title: `${title} · Synapse Shop` })),
+    edges: shopPages.flatMap(([path, , links]) => [...shopNav, ...links].filter((l) => l !== path).map((l) => ({ source: shop + path, target: shop + l }))),
+  },
+  requests: [
+    ...shopPages.map(([path, , , status]) => ({ method: 'GET', url: shop + path, status_code: status ?? 200, headers: {} })),
+    { method: 'POST', url: `${shop}/checkout`, status_code: 303, headers: {}, body: '' },
+  ],
+  created_at: '2026-10-28T09:00:00Z',
+  updated_at: '2026-10-28T09:00:12Z',
+} as Crawl
 
 export const fragments: Fragment[] = [
   {

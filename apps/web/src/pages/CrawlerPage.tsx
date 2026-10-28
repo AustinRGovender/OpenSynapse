@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Crawl } from '@opensynapse/api-client'
+import { SiteMap } from '../components/crawler/SiteMap'
 import { Badge, Button, Card, EmptyState, Field, Select, Spinner, StatusBadge, TextInput } from '../components/ui/primitives'
 import { canEdit, useAuthStore } from '../stores/auth-store'
 import { type CrawlAuthType, type CrawlEngine, isActive, useCrawlerStore } from '../stores/crawler-store'
@@ -35,37 +36,6 @@ function specOperations(spec: string | undefined): SpecOperation[] {
       .sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method))
   } catch {
     return []
-  }
-}
-
-/** Pages as a tree, breadth-first from the entry page along discovered links. */
-function siteTree(crawl: Crawl): { url: string; title: string; depth: number }[] {
-  const nodes = crawl.graph.nodes
-  if (!nodes.length) return []
-  const children = new Map<string, string[]>()
-  for (const e of crawl.graph.edges) children.set(e.source, [...(children.get(e.source) ?? []), e.target])
-  const titles = new Map(nodes.map((n) => [n.url, n.title]))
-  const root = titles.has(crawl.entry_url) ? crawl.entry_url : nodes[0].url
-  const out: { url: string; title: string; depth: number }[] = []
-  const seen = new Set<string>()
-  const walk = (url: string, depth: number) => {
-    if (seen.has(url)) return
-    seen.add(url)
-    out.push({ url, title: titles.get(url) ?? '', depth })
-    for (const c of children.get(url) ?? []) walk(c, depth + 1)
-  }
-  walk(root, 0)
-  // Pages reached by redirects or forms rather than links.
-  for (const n of nodes) walk(n.url, 0)
-  return out
-}
-
-function pathOf(url: string) {
-  try {
-    const u = new URL(url)
-    return u.pathname + u.search
-  } catch {
-    return url
   }
 }
 
@@ -148,7 +118,6 @@ function Results({ crawl }: { crawl: Crawl }) {
   const [generating, setGenerating] = useState(false)
   const [tab, setTab] = useState<'requests' | 'pages'>('requests')
   const ops = useMemo(() => specOperations(crawl.openapi_spec), [crawl.openapi_spec])
-  const tree = useMemo(() => siteTree(crawl), [crawl])
   const isImport = !!crawl.openapi_url
   const running = isActive(crawl)
 
@@ -208,8 +177,8 @@ function Results({ crawl }: { crawl: Crawl }) {
               <button key={key} role="tab" type="button" aria-selected={tab === key} onClick={() => setTab(key)} className={`-mb-px border-b-2 px-2.5 py-2 text-xs font-medium ${tab === key ? 'border-teal-500 text-teal-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>{label}</button>
             ))}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {tab === 'requests' ? (
+          {tab === 'requests' ? (
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-slate-950 text-left text-slate-500">
                   <tr><th className="px-4 py-2 font-medium">Method</th><th className="px-4 py-2 font-medium">URL</th><th className="px-4 py-2 font-medium">Status</th><th className="px-4 py-2 font-medium">Body</th></tr>
@@ -225,18 +194,12 @@ function Results({ crawl }: { crawl: Crawl }) {
                   ))}
                 </tbody>
               </table>
-            ) : (
-              <ul className="p-3 text-xs">
-                {tree.map((n) => (
-                  <li key={n.url} className="flex items-center gap-2 py-0.5" style={{ paddingLeft: n.depth * 16 }}>
-                    <span className="text-slate-600">{n.depth ? '└' : '●'}</span>
-                    <span className="font-mono text-slate-200" title={n.url}>{pathOf(n.url)}</span>
-                    {n.title && <span className="truncate text-slate-500">{n.title}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1">
+              <SiteMap crawl={crawl} />
+            </div>
+          )}
         </>
       )}
       {crawl.status === 'completed' && (

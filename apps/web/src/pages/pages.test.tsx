@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useCrawlerStore } from '../stores/crawler-store'
 import { emptyAuth, usePlaygroundStore } from '../stores/playground-store'
-import { defaultRoutes, plan } from '../test/fixtures'
+import { defaultRoutes, plan, shopCrawl } from '../test/fixtures'
 import { calls, setMockRoutes } from '../test/mock-api'
 import { CrawlerPage } from './CrawlerPage'
 import { PlaygroundPage } from './PlaygroundPage'
@@ -77,5 +77,22 @@ describe('CrawlerPage', () => {
     expect(await screen.findByText('List products')).toBeInTheDocument()
     expect(screen.getByText('2 operations')).toBeInTheDocument()
     expect(calls.find((c) => c.method === 'POST')!.body).toEqual({ entry_url: 'http://shop:9002/openapi.yaml', openapi_url: 'http://shop:9002/openapi.yaml' })
+  })
+
+  it('shows a crawled site as a flow chart of its pages', async () => {
+    useCrawlerStore.setState({ crawl: shopCrawl })
+    render(<CrawlerPage />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Site map (15)' }))
+
+    expect(await screen.findByText('/shop/products?page=2')).toBeInTheDocument()
+    expect(screen.getByText('Start')).toBeInTheDocument()
+    expect(screen.getByText('Laptop · Synapse Shop')).toBeInTheDocument()
+    expect(screen.getByText('401')).toBeInTheDocument()
+    expect(screen.getByTitle(/No link led here/)).toHaveTextContent('/shop/orders/o-1001')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide the pages under /shop/products' }))
+    expect(screen.queryByText('/shop/products/p1')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show 6 more pages under /shop/products' }))
+    expect(screen.getByText('/shop/products/p1')).toBeInTheDocument()
   })
 })

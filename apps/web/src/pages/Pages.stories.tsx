@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import type { Run } from '@opensynapse/api-client'
-import { completedRun, defaultRoutes, summary } from '../test/fixtures'
+import { useCrawlerStore } from '../stores/crawler-store'
+import { completedRun, defaultRoutes, shopCrawl, summary } from '../test/fixtures'
 import { setMockRoutes } from '../test/mock-api'
 import { ComparisonPage } from './ComparisonPage'
 import { CrawlerPage } from './CrawlerPage'
@@ -83,6 +84,15 @@ export const Playground: Story = {
 export const Crawler: Story = {
   render: () => {
     setMockRoutes(routes())
+    useCrawlerStore.setState({ crawl: null })
+    return <div className="h-[600px]"><CrawlerPage /></div>
+  },
+}
+
+export const CrawlerResults: Story = {
+  render: () => {
+    setMockRoutes(routes())
+    useCrawlerStore.setState({ crawl: shopCrawl })
     return <div className="h-[600px]"><CrawlerPage /></div>
   },
 }

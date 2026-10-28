@@ -62,3 +62,53 @@ body {
 .react-flow__attribution {
   display: none;
 }
+
+/* Crawler site map. Pages cascade in by link depth and each link draws
+   towards its page (delays are set inline per depth). The pulse along the
+   links is driven from SiteMap.tsx. */
+.sitemap-node {
+  animation: sitemap-slide-in 250ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.sitemap-link {
+  animation: sitemap-fade-in 300ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.sitemap-link .react-flow__edge-path {
+  stroke-dasharray: 1;
+  animation: sitemap-draw 300ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: inherit;
+}
+.sitemap-pulse {
+  fill: none;
+  stroke: var(--color-teal-400);
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+@keyframes sitemap-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+@keyframes sitemap-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sitemap-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sitemap-node,
+  .sitemap-link,
+  .sitemap-link .react-flow__edge-path {
+    animation: none;
+  }
+  .sitemap-pulse {
+    display: none;
+  }
+}
