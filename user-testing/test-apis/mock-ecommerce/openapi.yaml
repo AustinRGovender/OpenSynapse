@@ -171,6 +171,23 @@ paths:
                     type: string
                     example: Invalid request
 
+  /orders/latest:
+    get:
+      summary: Get the most recent order
+      description: Returns the most recently placed order, or 404 if no orders exist yet
+      operationId: getLatestOrder
+      tags:
+        - Orders
+      responses:
+        '200':
+          description: The latest order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: No orders yet
+
   /orders/{id}:
     get:
       summary: Get order by ID

@@ -53,8 +53,41 @@
         "type": "object"
       },
       "description": "Child nodes (scenarios, data sources, environment bindings)."
+    },
+    "thresholds": {
+      "type": "array",
+      "description": "Pass/fail criteria (k6 thresholds). A failed threshold marks the run's thresholds as failed; abort_on_fail ends the run early.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\{[^{}']*\\})?$",
+            "description": "k6 metric, optionally with a tag filter, e.g. http_req_duration{group:::Checkout}."
+          },
+          "condition": {
+            "type": "string",
+            "description": "k6 threshold expression, e.g. rate<0.05 or p(95)<500."
+          },
+          "abort_on_fail": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "metric",
+          "condition"
+        ],
+        "additionalProperties": false
+      }
     }
   },
-  "required": ["id", "type", "name", "enabled", "children"],
+  "required": [
+    "id",
+    "type",
+    "name",
+    "enabled",
+    "children"
+  ],
   "additionalProperties": false
 }

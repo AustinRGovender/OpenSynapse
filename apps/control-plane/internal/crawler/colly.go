@@ -5,7 +5,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,8 +30,14 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 	visited := map[string]bool{}
 	visitCount := 0 // tracks dispatched visits (not completed responses)
 
+	// Depth counts links followed from the start page; Colly counts the start
+	// page itself as depth 1.
+	maxDepth := cfg.Depth
+	if maxDepth > 0 {
+		maxDepth++
+	}
 	c := colly.NewCollector(
-		colly.MaxDepth(cfg.Depth),
+		colly.MaxDepth(maxDepth),
 		colly.Async(true),
 	)
 	c.SetRequestTimeout(15 * time.Second)
@@ -134,13 +143,9 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 		}
 	}()
 
-	// Handle form login before crawling
+	// Sign in through the start page's login form before crawling.
 	if cfg.Auth.Type == "form_login" {
-		err := c.Post(cfg.EntryURL, map[string]string{
-			"username": cfg.Auth.Username,
-			"password": cfg.Auth.Password,
-		})
-		if err != nil {
+		if err := collyFormLogin(c, cfg); err != nil {
 			close(done)
 			return db.CrawlGraph{}, nil, fmt.Errorf("form login failed: %w", err)
 		}
@@ -162,6 +167,74 @@ func (e *CollyEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Pro
 		Edges: ensureEdges(edges),
 	}
 	return graph, ensureRequests(requests), nil
+}
+
+// userFieldNames are input names taken to be the login's username field.
+var userFieldNames = []string{"username", "user", "login", "email", "user_name", "userid"}
+
+// collyFormLogin signs in through the login form on the start page: it fills
+// the username (or email) and password fields, keeps the form's other fields
+// such as CSRF tokens, and posts to the form's action. The crawling collector
+// shares the cookie jar, so it crawls as the signed-in user.
+func collyFormLogin(c *colly.Collector, cfg CrawlConfig) error {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return err
+	}
+	c.SetCookieJar(jar)
+	// A separate collector, so fetching the start page here does not mark it
+	// visited for the crawl itself.
+	login := colly.NewCollector()
+	login.SetCookieJar(jar)
+	login.SetRequestTimeout(15 * time.Second)
+
+	var action string
+	fields := map[string]string{}
+	found := false
+	login.OnHTML("form", func(e *colly.HTMLElement) {
+		if found || e.DOM.Find("input[type=password]").Length() == 0 {
+			return
+		}
+		found = true
+		action = e.Request.URL.String()
+		if a := strings.TrimSpace(e.Attr("action")); a != "" {
+			action = e.Request.AbsoluteURL(a)
+		}
+		userSet := false
+		e.ForEach("input", func(_ int, in *colly.HTMLElement) {
+			name := in.Attr("name")
+			if name == "" {
+				return
+			}
+			typ := strings.ToLower(in.Attr("type"))
+			switch {
+			case typ == "password":
+				fields[name] = cfg.Auth.Password
+			case !userSet && (typ == "email" || slices.Contains(userFieldNames, strings.ToLower(name))):
+				fields[name] = cfg.Auth.Username
+				userSet = true
+			case typ != "submit" && typ != "button" && typ != "checkbox" && typ != "radio":
+				fields[name] = in.Attr("value")
+			}
+		})
+	})
+	status := 0
+	login.OnResponse(func(r *colly.Response) { status = r.StatusCode })
+	login.OnError(func(r *colly.Response, _ error) { status = r.StatusCode })
+
+	if err := login.Visit(cfg.EntryURL); err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no login form (a form with a password field) on %s", cfg.EntryURL)
+	}
+	if err := login.Post(action, fields); err != nil && status < 400 {
+		return err
+	}
+	if status >= 400 {
+		return fmt.Errorf("the login form answered %d; check the username and password", status)
+	}
+	return nil
 }
 
 func extractHost(rawURL string) string {

@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/stats"
 )
 
 type ReportHandlers struct {
@@ -20,23 +22,47 @@ func NewReportHandlers(reports *db.ReportStore, runs *db.RunStore) *ReportHandle
 // Compare computes a comparison between multiple runs.
 type compareRequest struct {
 	RunIDs  []string `json:"run_ids"`
-	Metrics []string `json:"metrics"`
+	Metrics []string `json:"metrics,omitempty"`
 }
 
 type comparisonResult struct {
-	Runs    []db.Run          `json:"runs"`
-	Changes []metricChange    `json:"changes"`
+	Runs    []db.Run       `json:"runs"`
+	Changes []metricChange `json:"changes"`
 }
 
+// metricChange compares one metric between the baseline run (A, the first
+// selected) and another run (B).
 type metricChange struct {
-	Metric     string  `json:"metric"`
-	RunAID     string  `json:"run_a_id"`
-	RunBID     string  `json:"run_b_id"`
-	ValueA     float64 `json:"value_a"`
-	ValueB     float64 `json:"value_b"`
-	AbsDiff    float64 `json:"abs_diff"`
-	PctChange  float64 `json:"pct_change"`
-	Improved   bool    `json:"improved"`
+	Metric      string  `json:"metric"`
+	RunAID      string  `json:"run_a_id"`
+	RunBID      string  `json:"run_b_id"`
+	ValueA      float64 `json:"value_a"`
+	ValueB      float64 `json:"value_b"`
+	AbsDiff     float64 `json:"abs_diff"`
+	PctChange   float64 `json:"pct_change"`
+	Improved    bool    `json:"improved"`
+	Significant bool    `json:"significant"`
+	PValue      float64 `json:"p_value"`
+}
+
+// Changes smaller than this are never flagged, however consistent.
+const minPracticalChangePct = 2.0
+
+// significance is the p-value below which a difference is called real.
+const significance = 0.05
+
+type comparedMetric struct {
+	name        string
+	lowerBetter bool
+	summary     func(s *db.RunSummary) float64
+	perSecond   func(p db.MetricPoint) float64
+}
+
+var comparedMetrics = []comparedMetric{
+	{"p95_ms", true, func(s *db.RunSummary) float64 { return s.P95MS }, func(p db.MetricPoint) float64 { return p.P95MS }},
+	{"p50_ms", true, func(s *db.RunSummary) float64 { return s.P50MS }, func(p db.MetricPoint) float64 { return p.P50MS }},
+	{"error_rate", true, func(s *db.RunSummary) float64 { return s.ErrorRate }, func(p db.MetricPoint) float64 { return p.ErrorRate }},
+	{"throughput_rps", false, func(s *db.RunSummary) float64 { return s.ThroughputRPS }, func(p db.MetricPoint) float64 { return p.RPS }},
 }
 
 func (h *ReportHandlers) Compare(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +81,8 @@ func (h *ReportHandlers) Compare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load all runs
 	var runs []db.Run
+	series := map[string][]db.MetricPoint{}
 	for _, id := range req.RunIDs {
 		run, err := h.runs.Get(id)
 		if err != nil {
@@ -67,84 +93,78 @@ func (h *ReportHandlers) Compare(w http.ResponseWriter, r *http.Request) {
 			notFound(w, "RUN", id)
 			return
 		}
+		pts, err := h.runs.ListMetrics(id, 0, 0)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		run.PlanSnapshot = nil
 		runs = append(runs, *run)
+		series[id] = pts
 	}
 
-	// Compute metric changes between first and last run
-	changes := computeChanges(runs)
-
-	writeJSON(w, http.StatusOK, comparisonResult{
-		Runs:    runs,
-		Changes: changes,
-	})
+	writeJSON(w, http.StatusOK, comparisonResult{Runs: runs, Changes: computeChanges(runs, series)})
 }
 
-func computeChanges(runs []db.Run) []metricChange {
-	if len(runs) < 2 {
-		return nil
-	}
-
-	first := runs[0]
-	last := runs[len(runs)-1]
-
-	if first.Summary == nil || last.Summary == nil {
-		return nil
-	}
-
-	a := first.Summary
-	b := last.Summary
-
-	metrics := []struct {
-		name     string
-		valueA   float64
-		valueB   float64
-		lowerBetter bool
-	}{
-		{"p95_ms", a.P95MS, b.P95MS, true},
-		{"p90_ms", a.P90MS, b.P90MS, true},
-		{"p50_ms", a.P50MS, b.P50MS, true},
-		{"error_rate", a.ErrorRate, b.ErrorRate, true},
-		{"throughput_rps", a.ThroughputRPS, b.ThroughputRPS, false},
-	}
-
-	var changes []metricChange
-	for _, m := range metrics {
-		absDiff := m.valueB - m.valueA
-		pctChange := 0.0
-		if m.valueA != 0 {
-			pctChange = (absDiff / m.valueA) * 100
+// activeSeconds keeps seconds in which requests completed, so ramp-up gaps
+// and pauses don't dilute the comparison.
+func activeSeconds(pts []db.MetricPoint, f func(db.MetricPoint) float64) []float64 {
+	var out []float64
+	for _, p := range pts {
+		if p.Requests > 0 {
+			out = append(out, f(p))
 		}
+	}
+	return out
+}
 
-		// Only flag significant changes (>5%)
-		if abs(pctChange) < 5 {
+// computeChanges compares every run against the first (baseline). A change
+// is significant when Welch's t-test on the per-second values gives
+// p < 0.05 and the change is at least 2%; runs too short for the test fall
+// back to a 5% threshold on the summary values.
+func computeChanges(runs []db.Run, series map[string][]db.MetricPoint) []metricChange {
+	if len(runs) < 2 || runs[0].Summary == nil {
+		return []metricChange{}
+	}
+	base := runs[0]
+	changes := []metricChange{}
+	for _, other := range runs[1:] {
+		if other.Summary == nil {
 			continue
 		}
+		for _, m := range comparedMetrics {
+			a, b := m.summary(base.Summary), m.summary(other.Summary)
+			diff := b - a
+			pct := 0.0
+			if a != 0 {
+				pct = diff / a * 100
+			} else if b != 0 {
+				pct = 100
+			}
 
-		improved := absDiff < 0
-		if !m.lowerBetter {
-			improved = absDiff > 0
+			sa := activeSeconds(series[base.ID], m.perSecond)
+			sb := activeSeconds(series[other.ID], m.perSecond)
+			p := 1.0
+			significant := false
+			if len(sa) >= 5 && len(sb) >= 5 {
+				p = stats.WelchTTest(sa, sb)
+				significant = p < significance && math.Abs(pct) >= minPracticalChangePct
+			} else {
+				significant = math.Abs(pct) >= 5
+			}
+
+			improved := diff < 0
+			if !m.lowerBetter {
+				improved = diff > 0
+			}
+			changes = append(changes, metricChange{
+				Metric: m.name, RunAID: base.ID, RunBID: other.ID,
+				ValueA: a, ValueB: b, AbsDiff: diff, PctChange: pct,
+				Improved: improved, Significant: significant, PValue: p,
+			})
 		}
-
-		changes = append(changes, metricChange{
-			Metric:    m.name,
-			RunAID:    first.ID,
-			RunBID:    last.ID,
-			ValueA:    m.valueA,
-			ValueB:    m.valueB,
-			AbsDiff:   absDiff,
-			PctChange: pctChange,
-			Improved:  improved,
-		})
 	}
-
 	return changes
-}
-
-func abs(f float64) float64 {
-	if f < 0 {
-		return -f
-	}
-	return f
 }
 
 // Reports CRUD

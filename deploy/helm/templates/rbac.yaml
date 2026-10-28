@@ -1,0 +1,44 @@
+# The control plane creates a TestRun (with a ConfigMap for the script and a
+# Secret for its environment) per run, follows the runner pods' logs for
+# metrics, and deletes everything when the run ends.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["k6.io"]
+    resources: ["testruns"]
+    verbs: ["create", "get", "list", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["create", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "opensynapse.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-control-plane
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-control-plane
+    namespace: {{ .Release.Namespace }}

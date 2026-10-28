@@ -7,10 +7,20 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	localbrowser "github.com/opensynapse/opensynapse/apps/control-plane/internal/browser"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 )
+
+func skipWithoutBrowser(t *testing.T) {
+	t.Helper()
+	if _, err := localbrowser.Path(); err != nil {
+		t.Skip("no Chrome or Chromium installed")
+	}
+}
 
 func TestRodEngineBasicCrawl(t *testing.T) {
 	mux := http.NewServeMux()
@@ -149,4 +159,49 @@ func TestRodEngineFormLogin(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	_ = loggedIn // Form submission depends on JS execution timing
+}
+
+// The browser engine signs in through the start page's form, whether it asks
+// for a username or an email, and then crawls as the signed-in user.
+func TestRodFormLoginUsesTheLoginForm(t *testing.T) {
+	skipWithoutBrowser(t)
+	for _, field := range []string{"username", "email"} {
+		srv := loginSite(t, field)
+		cfg := CrawlConfig{EntryURL: srv.URL + "/", Depth: 2, SameOrigin: true, Limit: 20,
+			Auth: db.CrawlAuthConfig{Type: "form_login", Username: demoUser(field), Password: "secret"}}
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		_, reqs, err := (&RodEngine{}).Crawl(ctx, cfg, nil)
+		cancel()
+		srv.Close()
+		if err != nil {
+			t.Fatalf("%s form: %v", field, err)
+		}
+		reached := false
+		for _, r := range reqs {
+			if strings.HasSuffix(r.URL, "/members/secret") && r.StatusCode == 200 {
+				reached = true
+			}
+		}
+		if !reached {
+			t.Errorf("%s form: the crawl did not reach the members-only page as the signed-in user", field)
+		}
+	}
+}
+
+func TestRodDepthCountsLinksFromTheStartPage(t *testing.T) {
+	skipWithoutBrowser(t)
+	srv := chainSite(t)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	_, reqs, err := (&RodEngine{}).Crawl(ctx, CrawlConfig{EntryURL: srv.URL + "/", Depth: 2, SameOrigin: true, Limit: 50}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDepth(t, reqs)
+	for _, r := range reqs {
+		if strings.HasSuffix(r.URL, "/favicon.ico") {
+			t.Errorf("the browser's own favicon request was recorded: %s", r.URL)
+		}
+	}
 }

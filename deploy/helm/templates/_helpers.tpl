@@ -63,16 +63,59 @@ app.kubernetes.io/component: postgres
 {{- end }}
 
 {{/*
-MinIO selector labels
+Object storage selector labels
 */}}
-{{- define "opensynapse.minio.selectorLabels" -}}
+{{- define "opensynapse.objectStorage.selectorLabels" -}}
 {{ include "opensynapse.selectorLabels" . }}
-app.kubernetes.io/component: minio
+app.kubernetes.io/component: object-storage
 {{- end }}
 
 {{/*
-Postgres DSN
+A credential that is generated on install and kept on upgrade: the value
+given in values, else the one already stored in the release's app Secret,
+else a new random one. Call with (dict "root" . "key" "x" "value" .Values.y).
 */}}
-{{- define "opensynapse.postgres.dsn" -}}
-postgres://{{ .Values.postgres.username }}:{{ .Values.postgres.password }}@{{ .Release.Name }}-postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?sslmode=disable
+{{- define "opensynapse.credential" -}}
+{{- $root := .root -}}
+{{- if .value -}}
+{{- .value -}}
+{{- else -}}
+{{- $existing := lookup "v1" "Secret" $root.Release.Namespace (printf "%s-app" $root.Release.Name) -}}
+{{- if and $existing $existing.data (hasKey $existing.data .key) -}}
+{{- index $existing.data .key | b64dec -}}
+{{- else if eq .key "secret-key" -}}
+{{- randBytes 32 -}}
+{{- else -}}
+{{- randAlphaNum 32 -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+In-cluster DNS name of the control plane's Service.
+*/}}
+{{- define "opensynapse.controlPlaneHost" -}}
+{{ .Release.Name }}-control-plane.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+
+{{/*
+Image the runner pods use: workers.image, else the control-plane image.
+*/}}
+{{- define "opensynapse.runnerImage" -}}
+{{- $repo := default .Values.controlPlane.image.repository .Values.workers.image.repository -}}
+{{- $tag := default .Values.controlPlane.image.tag .Values.workers.image.tag -}}
+{{ $repo }}:{{ $tag }}
+{{- end }}
+
+{{/*
+Host header values the API accepts.
+*/}}
+{{- define "opensynapse.allowedHosts" -}}
+{{- $hosts := list (printf "%s-control-plane" .Release.Name) (printf "%s-control-plane.%s" .Release.Name .Release.Namespace) (printf "%s-control-plane.%s.svc" .Release.Name .Release.Namespace) (include "opensynapse.controlPlaneHost" .) -}}
+{{- if .Values.ingress.enabled -}}
+{{- range .Values.ingress.hosts -}}
+{{- $hosts = append $hosts .host -}}
+{{- end -}}
+{{- end -}}
+{{- join "," (concat $hosts .Values.controlPlane.allowedHosts) -}}
 {{- end }}

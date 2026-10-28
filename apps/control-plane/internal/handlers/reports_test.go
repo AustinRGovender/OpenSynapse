@@ -2,8 +2,13 @@ package handlers_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
@@ -30,15 +35,15 @@ func createTestRunWithSummary(t *testing.T, ts *testutil.TestServer, name string
 
 	ts.Runs.UpdateStatus(run.ID, "completed")
 	ts.Runs.UpdateSummary(run.ID, &db.RunSummary{
-		TotalRequests: 1000,
-		FailedRequests: 5,
-		ErrorRate:     0.005,
-		ThroughputRPS: rps,
-		P50MS:         p95 * 0.7,
-		P90MS:         p95 * 0.9,
-		P95MS:         p95,
-		P99MS:         p95 * 1.2,
-		MaxMS:         p95 * 2,
+		TotalRequests:    1000,
+		FailedRequests:   5,
+		ErrorRate:        0.005,
+		ThroughputRPS:    rps,
+		P50MS:            p95 * 0.7,
+		P90MS:            p95 * 0.9,
+		P95MS:            p95,
+		P99MS:            p95 * 1.2,
+		MaxMS:            p95 * 2,
 		ThresholdsPassed: true,
 	})
 
@@ -197,7 +202,7 @@ func TestExportCSV(t *testing.T) {
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if ct != "text/csv" {
+	if !strings.HasPrefix(ct, "text/csv") {
 		t.Fatalf("expected text/csv, got %s", ct)
 	}
 	resp.Body.Close()
@@ -218,8 +223,31 @@ func TestExportHTML(t *testing.T) {
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if ct != "text/html" {
+	if !strings.HasPrefix(ct, "text/html") {
 		t.Fatalf("expected text/html, got %s", ct)
 	}
 	resp.Body.Close()
+}
+
+// An empty raw archive (cluster workers report aggregates) falls back to the
+// per-second series instead of a header-only file.
+func TestExportCSVEmptyArchiveFallsBackToSeries(t *testing.T) {
+	dir := t.TempDir()
+	ts := testutil.NewTestServerWith(t, testutil.Options{DataDir: dir})
+	runID := createTestRunWithSummary(t, ts, "Empty archive", 100.0, 50.0)
+
+	path := filepath.Join(dir, "runs", runID, "samples.jsonl.gz")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	f, _ := os.Create(path)
+	gzip.NewWriter(f).Close()
+	f.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL()+"/api/v1/runs/"+runID+"/export", bytes.NewBufferString(`{"format":"csv"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := ts.Do(req)
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	if !strings.HasPrefix(string(out), "timestamp,requests,failed") {
+		t.Fatalf("expected the per-second series, got %q", string(out))
+	}
 }

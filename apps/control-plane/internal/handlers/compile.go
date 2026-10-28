@@ -8,7 +8,9 @@ import (
 
 // Compile handles POST /api/v1/plans/{id}/compile.
 // It reads the plan from the DB, compiles it to a k6 JavaScript file,
-// and returns the script as text/javascript.
+// and returns the script as text/javascript. By default the script is
+// standalone (runs with stock k6); ?mode=managed returns the script
+// OpenSynapse itself runs, with live-control glue.
 func (h *PlanHandlers) Compile(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -22,12 +24,14 @@ func (h *PlanHandlers) Compile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	script, err := compiler.Compile(plan)
+	managed := r.URL.Query().Get("mode") == "managed"
+	res, err := compiler.CompileWithOptions(plan, compiler.Options{Managed: managed, KV: managed})
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "COMPILE_ERROR",
 			"Failed to compile plan to k6 script: "+err.Error(), nil)
 		return
 	}
+	script := res.Script
 
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

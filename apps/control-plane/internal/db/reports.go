@@ -10,13 +10,13 @@ import (
 )
 
 type Report struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	RunIDs            []string  `json:"run_ids"`
-	Metrics           []string  `json:"metrics"`
-	Normalisation     string    `json:"normalisation"`
-	AIAnalysisCached  *string   `json:"ai_analysis_cached,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	RunIDs           []string  `json:"run_ids"`
+	Metrics          []string  `json:"metrics"`
+	Normalisation    string    `json:"normalisation"`
+	AIAnalysisCached *string   `json:"ai_analysis_cached,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type ReportStore struct {

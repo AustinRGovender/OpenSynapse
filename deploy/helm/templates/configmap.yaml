@@ -7,11 +7,27 @@ metadata:
     app.kubernetes.io/component: control-plane
 data:
   OPENSYNAPSE_MODE: "cluster"
-  DB_DSN: {{ include "opensynapse.postgres.dsn" . | quote }}
-  POSTGRES_HOST: {{ .Release.Name }}-postgres
-  POSTGRES_PORT: {{ .Values.postgres.port | quote }}
-  POSTGRES_DB: {{ .Values.postgres.database | quote }}
-  POSTGRES_USER: {{ .Values.postgres.username | quote }}
-  MINIO_ENDPOINT: {{ .Release.Name }}-minio:{{ .Values.minio.port }}
-  MINIO_BUCKET: {{ .Values.minio.bucket | quote }}
+  OPENSYNAPSE_BIND: "0.0.0.0"
+  PORT: {{ .Values.controlPlane.port | quote }}
+  OPENSYNAPSE_DATA_DIR: /data
+  OPENSYNAPSE_LOG_FORMAT: {{ .Values.controlPlane.logFormat | quote }}
+  TEAM_MODE: {{ .Values.controlPlane.teamMode | quote }}
+  {{- with .Values.controlPlane.adminEmail }}
+  OPENSYNAPSE_ADMIN_EMAIL: {{ . | quote }}
+  {{- end }}
+  OPENSYNAPSE_ALLOWED_HOSTS: {{ include "opensynapse.allowedHosts" . | quote }}
+  # Runner pods reach the live-control endpoint through the Service.
+  OPENSYNAPSE_CONTROL_URL: "http://{{ include "opensynapse.controlPlaneHost" . }}:{{ .Values.service.port }}"
+  OPENSYNAPSE_RUNNER_IMAGE: {{ include "opensynapse.runnerImage" . | quote }}
+  OPENSYNAPSE_RUNNER_PULL_POLICY: {{ .Values.workers.image.pullPolicy | quote }}
+  OPENSYNAPSE_RUNNER_RESOURCES: {{ .Values.workers.resources | toJson | quote }}
+  OPENSYNAPSE_MAX_WORKERS: {{ .Values.workers.maxPerRun | quote }}
+  {{- if .Values.objectStorage.enabled }}
+  MINIO_ENDPOINT: "{{ .Release.Name }}-object-storage:{{ .Values.objectStorage.port }}"
+  MINIO_BUCKET: {{ .Values.objectStorage.bucket | quote }}
   MINIO_USE_SSL: "false"
+  {{- else }}
+  MINIO_ENDPOINT: {{ required "externalObjectStorage.endpoint is required when objectStorage.enabled=false" .Values.externalObjectStorage.endpoint | quote }}
+  MINIO_BUCKET: {{ .Values.externalObjectStorage.bucket | quote }}
+  MINIO_USE_SSL: {{ .Values.externalObjectStorage.useSSL | quote }}
+  {{- end }}

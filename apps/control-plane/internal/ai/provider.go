@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,17 +26,98 @@ type ChatResponse struct {
 }
 
 // GetProvider returns the provider implementation for the given name.
-func GetProvider(name string) (Provider, error) {
+// endpoint is the Azure OpenAI resource URL; other providers ignore it.
+func GetProvider(name, endpoint string) (Provider, error) {
 	switch name {
 	case "openai":
 		return &OpenAIProvider{}, nil
 	case "anthropic":
 		return &AnthropicProvider{}, nil
 	case "azure_openai":
-		return &AzureOpenAIProvider{}, nil
+		return &AzureOpenAIProvider{Endpoint: endpoint}, nil
+	case "nvidia_nim":
+		return &NIMProvider{}, nil
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", name)
 	}
+}
+
+// httpClient is shared by every provider. Hosted models can take well over
+// 30 s to write a 500-word analysis, so the timeout is generous.
+var httpClient = &http.Client{Timeout: 2 * time.Minute}
+
+// --- OpenAI-compatible chat completions (OpenAI, Azure OpenAI, NVIDIA NIM) ---
+
+// chatBody is a single-turn chat completions request. Azure routes by
+// deployment name, so it passes an empty model and the field is left out.
+func chatBody(model, prompt string) map[string]interface{} {
+	body := map[string]interface{}{
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"max_tokens": 2000,
+	}
+	if model != "" {
+		body["model"] = model
+	}
+	return body
+}
+
+// chatCompletions posts body to an OpenAI-compatible endpoint and reads the
+// first choice. label names the provider in errors; model prices the call.
+func chatCompletions(label, url, model, authHeader, authValue string, body map[string]interface{}) (*ChatResponse, error) {
+	bodyJSON, _ := json.Marshal(body)
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyJSON))
+	if err != nil {
+		return nil, fmt.Errorf("%s request: %w", label, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(authHeader, authValue)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s request: %w", label, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("%s returned %d: %s", label, resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Choices []struct {
+			Message      struct{ Content string } `json:"message"`
+			FinishReason string                   `json:"finish_reason"`
+		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("%s returned an unreadable response: %w", label, err)
+	}
+
+	// Reasoning models can spend the whole token budget thinking and return
+	// no answer; report that rather than caching an empty analysis.
+	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
+		reason := "none"
+		if len(result.Choices) > 0 && result.Choices[0].FinishReason != "" {
+			reason = result.Choices[0].FinishReason
+		}
+		return nil, fmt.Errorf("%s returned no answer (finish reason: %s)", label, reason)
+	}
+
+	cost := estimateCost(model, result.Usage.PromptTokens, result.Usage.CompletionTokens)
+
+	return &ChatResponse{
+		Content:      result.Choices[0].Message.Content,
+		InputTokens:  result.Usage.PromptTokens,
+		OutputTokens: result.Usage.CompletionTokens,
+		CostUSD:      cost,
+	}, nil
 }
 
 // --- OpenAI ---
@@ -45,55 +127,8 @@ type OpenAIProvider struct{}
 func (p *OpenAIProvider) Name() string { return "openai" }
 
 func (p *OpenAIProvider) Chat(apiKey, model, prompt string) (*ChatResponse, error) {
-	body := map[string]interface{}{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
-		"max_tokens": 2000,
-	}
-	bodyJSON, _ := json.Marshal(body)
-
-	req, _ := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(bodyJSON))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("openai request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("openai returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct{ Content string } `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-		} `json:"usage"`
-	}
-	json.Unmarshal(respBody, &result)
-
-	content := ""
-	if len(result.Choices) > 0 {
-		content = result.Choices[0].Message.Content
-	}
-
-	cost := estimateCost(model, result.Usage.PromptTokens, result.Usage.CompletionTokens)
-
-	return &ChatResponse{
-		Content:      content,
-		InputTokens:  result.Usage.PromptTokens,
-		OutputTokens: result.Usage.CompletionTokens,
-		CostUSD:      cost,
-	}, nil
+	return chatCompletions("openai", "https://api.openai.com/v1/chat/completions", model,
+		"Authorization", "Bearer "+apiKey, chatBody(model, prompt))
 }
 
 func (p *OpenAIProvider) TestKey(apiKey, model string) error {
@@ -122,8 +157,7 @@ func (p *AnthropicProvider) Chat(apiKey, model, prompt string) (*ChatResponse, e
 	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic request: %w", err)
 	}
@@ -172,59 +206,41 @@ type AzureOpenAIProvider struct {
 func (p *AzureOpenAIProvider) Name() string { return "azure_openai" }
 
 func (p *AzureOpenAIProvider) Chat(apiKey, model, prompt string) (*ChatResponse, error) {
-	url := fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=2024-02-01", p.Endpoint, model)
-
-	body := map[string]interface{}{
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
-		"max_tokens": 2000,
+	if p.Endpoint == "" {
+		return nil, fmt.Errorf("azure openai: no endpoint configured")
 	}
-	bodyJSON, _ := json.Marshal(body)
-
-	req, _ := http.NewRequest("POST", url, bytes.NewReader(bodyJSON))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api-key", apiKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("azure openai request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("azure openai returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct{ Content string } `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-		} `json:"usage"`
-	}
-	json.Unmarshal(respBody, &result)
-
-	content := ""
-	if len(result.Choices) > 0 {
-		content = result.Choices[0].Message.Content
-	}
-
-	cost := estimateCost(model, result.Usage.PromptTokens, result.Usage.CompletionTokens)
-
-	return &ChatResponse{
-		Content:      content,
-		InputTokens:  result.Usage.PromptTokens,
-		OutputTokens: result.Usage.CompletionTokens,
-		CostUSD:      cost,
-	}, nil
+	url := fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=2024-02-01", strings.TrimRight(p.Endpoint, "/"), model)
+	return chatCompletions("azure openai", url, model, "api-key", apiKey, chatBody("", prompt))
 }
 
 func (p *AzureOpenAIProvider) TestKey(apiKey, model string) error {
+	_, err := p.Chat(apiKey, model, "Say 'ok'")
+	return err
+}
+
+// --- NVIDIA NIM ---
+
+// nimBaseURL is NVIDIA's hosted API catalog (build.nvidia.com).
+const nimBaseURL = "https://integrate.api.nvidia.com/v1"
+
+// NIMProvider calls NVIDIA NIM's OpenAI-compatible chat completions API.
+// Model names are catalog IDs such as "z-ai/glm-5.3-flash".
+type NIMProvider struct {
+	BaseURL string // empty means NVIDIA's hosted API; a self-hosted NIM serves the same API
+}
+
+func (p *NIMProvider) Name() string { return "nvidia_nim" }
+
+func (p *NIMProvider) Chat(apiKey, model, prompt string) (*ChatResponse, error) {
+	base := p.BaseURL
+	if base == "" {
+		base = nimBaseURL
+	}
+	return chatCompletions("nvidia nim", strings.TrimRight(base, "/")+"/chat/completions", model,
+		"Authorization", "Bearer "+apiKey, chatBody(model, prompt))
+}
+
+func (p *NIMProvider) TestKey(apiKey, model string) error {
 	_, err := p.Chat(apiKey, model, "Say 'ok'")
 	return err
 }
@@ -233,11 +249,11 @@ func (p *AzureOpenAIProvider) TestKey(apiKey, model string) error {
 func estimateCost(model string, inputTokens, outputTokens int) float64 {
 	// Approximate pricing per 1M tokens (input/output)
 	prices := map[string][2]float64{
-		"gpt-4o":          {2.50, 10.00},
-		"gpt-4-turbo":     {10.00, 30.00},
-		"gpt-3.5-turbo":   {0.50, 1.50},
-		"claude-sonnet-4-20250514":  {3.00, 15.00},
-		"claude-haiku-4-20250414": {0.80, 4.00},
+		"gpt-4o":                   {2.50, 10.00},
+		"gpt-4-turbo":              {10.00, 30.00},
+		"gpt-3.5-turbo":            {0.50, 1.50},
+		"claude-sonnet-4-20250514": {3.00, 15.00},
+		"claude-haiku-4-20250414":  {0.80, 4.00},
 	}
 
 	price, ok := prices[model]

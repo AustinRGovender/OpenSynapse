@@ -254,7 +254,7 @@ func TestPlanCannotDeleteBuiltIn(t *testing.T) {
 	}
 }
 
-func TestPlanCannotUpdateBuiltIn(t *testing.T) {
+func TestBuiltInPlanCanBeUpdatedViaAPI(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 
 	// List to get a built-in plan ID
@@ -278,16 +278,26 @@ func TestPlanCannotUpdateBuiltIn(t *testing.T) {
 		t.Fatal("no built-in plan found")
 	}
 
-	// Try to update
-	updateBody := `{"name":"Hacked","description":"Hacked","tags":[],"root":{"id":"r","type":"plan","name":"r","enabled":true,"properties":{},"children":[]}}`
+	// Update should succeed
+	updateBody := `{"name":"My Custom Name","description":"Customised","tags":["custom"],"root":{"id":"r","type":"plan","name":"r","enabled":true,"properties":{},"children":[]}}`
 	req, _ = http.NewRequest("PUT", ts.URL()+"/api/v1/plans/"+builtInID, bytes.NewBufferString(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp = ts.Do(req)
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("update built-in: expected 403, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update built-in: expected 200, got %d", resp.StatusCode)
 	}
+
+	var updated map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&updated)
 	resp.Body.Close()
+
+	if updated["name"] != "My Custom Name" {
+		t.Fatalf("expected name 'My Custom Name', got %v", updated["name"])
+	}
+	if updated["version"].(float64) != 2 {
+		t.Fatalf("expected version 2, got %v", updated["version"])
+	}
 }
 
 func TestPlanListShowsBuiltInFirst(t *testing.T) {

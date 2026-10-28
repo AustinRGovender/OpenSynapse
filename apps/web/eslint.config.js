@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'storybook-static']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -19,5 +19,10 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+  },
+  {
+    // Storybook config, stories and tests are not hot-reloaded modules.
+    files: ['.storybook/**/*.{ts,tsx}', '**/*.stories.{ts,tsx}', '**/*.test.{ts,tsx}', 'src/test/**'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
 ])

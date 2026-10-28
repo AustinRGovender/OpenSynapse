@@ -1,0 +1,6397 @@
+{
+  "components": {
+    "schemas": {
+      "AIAnalysis": {
+        "properties": {
+          "cost_usd": {
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "report_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "response": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cost_usd",
+          "created_at",
+          "id",
+          "input_tokens",
+          "model",
+          "output_tokens",
+          "prompt",
+          "provider",
+          "question",
+          "response"
+        ],
+        "type": "object"
+      },
+      "AIConfig": {
+        "properties": {
+          "api_key_masked": {
+            "type": "string"
+          },
+          "azure_endpoint": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "monthly_cap_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key_masked",
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "APIError": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {},
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "APIToken": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AiConfigUpdate": {
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "azure_endpoint": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "monthly_cap_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "AnalyseRequest": {
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "report_id": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Binding": {
+        "properties": {
+          "default_value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "description",
+          "name",
+          "required"
+        ],
+        "type": "object"
+      },
+      "CapturedRequest": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "method": {
+            "type": "string"
+          },
+          "status_code": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "headers",
+          "method",
+          "status_code",
+          "url"
+        ],
+        "type": "object"
+      },
+      "CheckStat": {
+        "properties": {
+          "fails": {
+            "type": "integer"
+          },
+          "group": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "passes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fails",
+          "group",
+          "name",
+          "passes"
+        ],
+        "type": "object"
+      },
+      "CleanupResponse": {
+        "properties": {
+          "deleted_runs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted_runs"
+        ],
+        "type": "object"
+      },
+      "ClientCredentialsRequest": {
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "token_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "token_url"
+        ],
+        "type": "object"
+      },
+      "Collection": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/SavedRequest"
+            },
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "id",
+          "name",
+          "requests",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "CollectionRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/SavedRequest"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CompareRequest": {
+        "properties": {
+          "metrics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_ids"
+        ],
+        "type": "object"
+      },
+      "ComparisonResult": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/MetricChange"
+            },
+            "type": "array"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/Run"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes",
+          "runs"
+        ],
+        "type": "object"
+      },
+      "ControlRequest": {
+        "properties": {
+          "duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "paused": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "resume_schedule": {
+            "type": "boolean"
+          },
+          "rps": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "vus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ControlState": {
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "rps_target": {
+            "type": "integer"
+          },
+          "should_stop": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused",
+          "rps_target",
+          "should_stop"
+        ],
+        "type": "object"
+      },
+      "CookieInfo": {
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "string"
+          },
+          "http_only": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "secure": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "http_only",
+          "name",
+          "secure",
+          "value"
+        ],
+        "type": "object"
+      },
+      "Crawl": {
+        "properties": {
+          "auth_config": {
+            "$ref": "#/components/schemas/CrawlAuthConfig"
+          },
+          "blocklist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "entry_url": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "generated_plan_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "graph": {
+            "$ref": "#/components/schemas/CrawlGraph"
+          },
+          "id": {
+            "type": "string"
+          },
+          "openapi_spec": {
+            "type": "string"
+          },
+          "openapi_url": {
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/CrawlProgress"
+          },
+          "request_limit": {
+            "type": "integer"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/CapturedRequest"
+            },
+            "type": "array"
+          },
+          "same_origin": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_config",
+          "blocklist",
+          "created_at",
+          "depth",
+          "engine",
+          "entry_url",
+          "graph",
+          "id",
+          "progress",
+          "request_limit",
+          "requests",
+          "same_origin",
+          "status",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "CrawlAuthConfig": {
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "CrawlGraph": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlGraphEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/CrawlGraphNode"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "edges",
+          "nodes"
+        ],
+        "type": "object"
+      },
+      "CrawlGraphEdge": {
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "type": "object"
+      },
+      "CrawlGraphNode": {
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ],
+        "type": "object"
+      },
+      "CrawlProgress": {
+        "properties": {
+          "pages_discovered": {
+            "type": "integer"
+          },
+          "requests_captured": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pages_discovered",
+          "requests_captured"
+        ],
+        "type": "object"
+      },
+      "CreateEnvironmentRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Variable"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreatePlanRequest": {
+        "properties": {
+          "default_environment_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "root"
+        ],
+        "type": "object"
+      },
+      "CreatedToken": {
+        "properties": {
+          "api_token": {
+            "$ref": "#/components/schemas/APIToken"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_token",
+          "token"
+        ],
+        "type": "object"
+      },
+      "Credentials": {
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "Document": {
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/RunError"
+            },
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/RunEvent"
+            },
+            "type": "array"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Run"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "errors",
+          "events",
+          "series"
+        ],
+        "type": "object"
+      },
+      "EndpointStat": {
+        "properties": {
+          "avg_ms": {
+            "type": "number"
+          },
+          "error_rate": {
+            "type": "number"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "max_ms": {
+            "type": "number"
+          },
+          "method": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "p50_ms": {
+            "type": "number"
+          },
+          "p95_ms": {
+            "type": "number"
+          },
+          "p99_ms": {
+            "type": "number"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "rps": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "avg_ms",
+          "error_rate",
+          "failed",
+          "max_ms",
+          "method",
+          "name",
+          "p50_ms",
+          "p95_ms",
+          "p99_ms",
+          "requests",
+          "rps"
+        ],
+        "type": "object"
+      },
+      "Environment": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Variable"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "created_at",
+          "id",
+          "name",
+          "updated_at",
+          "variables"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/APIError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "Execution": {
+        "properties": {
+          "max_workers": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "max_workers",
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ExportRequestDoc": {
+        "properties": {
+          "format": {
+            "enum": [
+              "json",
+              "csv",
+              "html",
+              "pdf"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "type": "object"
+      },
+      "Fragment": {
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/Binding"
+            },
+            "type": "array"
+          },
+          "built_in": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "node_subtree": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bindings",
+          "built_in",
+          "created_at",
+          "description",
+          "id",
+          "name",
+          "node_subtree",
+          "tags",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "FragmentRequest": {
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/Binding"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "node_subtree": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "node_subtree"
+        ],
+        "type": "object"
+      },
+      "ImportJMXResponse": {
+        "properties": {
+          "log": {
+            "$ref": "#/components/schemas/ImportLog"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          }
+        },
+        "required": [
+          "log",
+          "plan"
+        ],
+        "type": "object"
+      },
+      "ImportLog": {
+        "properties": {
+          "approximated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "imported": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unsupported": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "approximated",
+          "imported",
+          "unsupported"
+        ],
+        "type": "object"
+      },
+      "IngestBatch": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/IngestCheck"
+            },
+            "type": "array"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/IngestEndpoint"
+            },
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/RunError"
+            },
+            "type": "array"
+          },
+          "final": {
+            "type": "boolean"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "seconds": {
+            "items": {
+              "$ref": "#/components/schemas/IngestSecond"
+            },
+            "type": "array"
+          },
+          "through": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "through"
+        ],
+        "type": "object"
+      },
+      "IngestCheck": {
+        "properties": {
+          "fails": {
+            "type": "integer"
+          },
+          "group": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "passes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group",
+          "name"
+        ],
+        "type": "object"
+      },
+      "IngestEndpoint": {
+        "properties": {
+          "durations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestHist"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "method": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "name"
+        ],
+        "type": "object"
+      },
+      "IngestHist": {
+        "properties": {
+          "b": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "max": {
+            "type": "number"
+          },
+          "min": {
+            "type": "number"
+          },
+          "n": {
+            "type": "integer"
+          },
+          "s": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "b",
+          "max",
+          "min",
+          "n",
+          "s"
+        ],
+        "type": "object"
+      },
+      "IngestSecond": {
+        "properties": {
+          "bytes_received": {
+            "type": "number"
+          },
+          "bytes_sent": {
+            "type": "number"
+          },
+          "checks_failed": {
+            "type": "integer"
+          },
+          "checks_passed": {
+            "type": "integer"
+          },
+          "durations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestHist"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "t": {
+            "type": "integer"
+          },
+          "vus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "t"
+        ],
+        "type": "object"
+      },
+      "ItemsAPIToken": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/APIToken"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ItemsMetricPoint": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ItemsPlanVersion": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlanVersion"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ItemsRunError": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunError"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ItemsRunEvent": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ItemsUser": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/User"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "KeyTest": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message",
+          "valid"
+        ],
+        "type": "object"
+      },
+      "ListResultCollection": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListResultEnvironment": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Environment"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListResultFragment": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Fragment"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListResultPlan": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Plan"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListResultReport": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Report"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListResultRun": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Run"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "LiveState": {
+        "properties": {
+          "active_vus": {
+            "type": "integer"
+          },
+          "can_control_duration": {
+            "type": "boolean"
+          },
+          "can_control_rps": {
+            "type": "boolean"
+          },
+          "can_control_vus": {
+            "type": "boolean"
+          },
+          "elapsed_seconds": {
+            "type": "integer"
+          },
+          "manual_vus": {
+            "type": "boolean"
+          },
+          "max_duration_seconds": {
+            "type": "integer"
+          },
+          "max_vus": {
+            "type": "integer"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "remaining_seconds": {
+            "type": "integer"
+          },
+          "rps_target": {
+            "type": "integer"
+          },
+          "starting": {
+            "type": "boolean"
+          },
+          "stopping": {
+            "type": "boolean"
+          },
+          "target_vus": {
+            "type": "integer"
+          },
+          "workers": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_vus",
+          "can_control_duration",
+          "can_control_rps",
+          "can_control_vus",
+          "elapsed_seconds",
+          "manual_vus",
+          "max_duration_seconds",
+          "max_vus",
+          "paused",
+          "remaining_seconds",
+          "rps_target",
+          "starting",
+          "stopping",
+          "target_vus",
+          "workers"
+        ],
+        "type": "object"
+      },
+      "LoginResponse": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/Principal"
+          }
+        },
+        "required": [
+          "expires_at",
+          "token",
+          "user"
+        ],
+        "type": "object"
+      },
+      "LogsResponse": {
+        "properties": {
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "type": "object"
+      },
+      "MetricChange": {
+        "properties": {
+          "abs_diff": {
+            "type": "number"
+          },
+          "improved": {
+            "type": "boolean"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "p_value": {
+            "type": "number"
+          },
+          "pct_change": {
+            "type": "number"
+          },
+          "run_a_id": {
+            "type": "string"
+          },
+          "run_b_id": {
+            "type": "string"
+          },
+          "significant": {
+            "type": "boolean"
+          },
+          "value_a": {
+            "type": "number"
+          },
+          "value_b": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "abs_diff",
+          "improved",
+          "metric",
+          "p_value",
+          "pct_change",
+          "run_a_id",
+          "run_b_id",
+          "significant",
+          "value_a",
+          "value_b"
+        ],
+        "type": "object"
+      },
+      "MetricPoint": {
+        "properties": {
+          "active_vus": {
+            "type": "integer"
+          },
+          "bytes_received": {
+            "type": "integer"
+          },
+          "bytes_sent": {
+            "type": "integer"
+          },
+          "checks_failed": {
+            "type": "integer"
+          },
+          "checks_passed": {
+            "type": "integer"
+          },
+          "error_rate": {
+            "type": "number"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "p50_ms": {
+            "type": "number"
+          },
+          "p90_ms": {
+            "type": "number"
+          },
+          "p95_ms": {
+            "type": "number"
+          },
+          "p99_ms": {
+            "type": "number"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "rps": {
+            "type": "number"
+          },
+          "timestamp_ms": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_vus",
+          "bytes_received",
+          "bytes_sent",
+          "checks_failed",
+          "checks_passed",
+          "error_rate",
+          "failed",
+          "iterations",
+          "p50_ms",
+          "p90_ms",
+          "p95_ms",
+          "p99_ms",
+          "requests",
+          "rps",
+          "timestamp_ms"
+        ],
+        "type": "object"
+      },
+      "MetricsPayload": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/LiveState"
+          }
+        },
+        "required": [
+          "points",
+          "state"
+        ],
+        "type": "object"
+      },
+      "MicroTestRequest": {
+        "properties": {
+          "duration_seconds": {
+            "type": "integer"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PlaygroundRequest"
+          },
+          "vus": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "request",
+          "vus"
+        ],
+        "type": "object"
+      },
+      "MicroTestResult": {
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/RunError"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "errors",
+          "series",
+          "status"
+        ],
+        "type": "object"
+      },
+      "Node": {
+        "properties": {
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "properties": {},
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "children",
+          "enabled",
+          "id",
+          "name",
+          "properties",
+          "type"
+        ],
+        "type": "object"
+      },
+      "NoteRequest": {
+        "properties": {
+          "payload": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "type": {
+            "enum": [
+              "user_note"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "OauthStartRequest": {
+        "properties": {
+          "auth_url": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "token_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_url",
+          "client_id",
+          "token_url"
+        ],
+        "type": "object"
+      },
+      "OauthStartResponse": {
+        "properties": {
+          "authorize_url": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorize_url",
+          "redirect_uri",
+          "state"
+        ],
+        "type": "object"
+      },
+      "OauthToken": {
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in",
+          "token_type"
+        ],
+        "type": "object"
+      },
+      "PasswordChange": {
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "type": "object"
+      },
+      "Plan": {
+        "properties": {
+          "built_in": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "default_environment_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "built_in",
+          "created_at",
+          "description",
+          "id",
+          "name",
+          "root",
+          "tags",
+          "updated_at",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PlanVersion": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "root": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created_at",
+          "description",
+          "id",
+          "name",
+          "plan_id",
+          "root",
+          "tags",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PlaygroundRequest": {
+        "properties": {
+          "auth_config": {},
+          "auth_type": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "body_type": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "method": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "url"
+        ],
+        "type": "object"
+      },
+      "PlaygroundResponse": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "body_size": {
+            "type": "integer"
+          },
+          "cookies": {
+            "items": {
+              "$ref": "#/components/schemas/CookieInfo"
+            },
+            "type": "array"
+          },
+          "final_url": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "status_text": {
+            "type": "string"
+          },
+          "timing": {
+            "$ref": "#/components/schemas/TimingBreakdown"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "body",
+          "body_size",
+          "cookies",
+          "final_url",
+          "headers",
+          "status",
+          "status_text",
+          "timing",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "Principal": {
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "role"
+        ],
+        "type": "object"
+      },
+      "PromptPreview": {
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt",
+          "question"
+        ],
+        "type": "object"
+      },
+      "Report": {
+        "properties": {
+          "ai_analysis_cached": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "normalisation": {
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "created_at",
+          "id",
+          "metrics",
+          "name",
+          "normalisation",
+          "run_ids"
+        ],
+        "type": "object"
+      },
+      "ReportRequest": {
+        "properties": {
+          "metrics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "normalisation": {
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "run_ids"
+        ],
+        "type": "object"
+      },
+      "Run": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "created_by_name": {
+            "type": "string"
+          },
+          "ended_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "environment_snapshot": {},
+          "id": {
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/RunParameters"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "plan_name": {
+            "type": "string"
+          },
+          "plan_snapshot": {},
+          "plan_version": {
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "created_at",
+          "id",
+          "parameters",
+          "plan_id",
+          "plan_name",
+          "plan_snapshot",
+          "plan_version",
+          "status"
+        ],
+        "type": "object"
+      },
+      "RunError": {
+        "properties": {
+          "error_code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "timestamp_ms": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "name",
+          "status",
+          "timestamp_ms",
+          "url"
+        ],
+        "type": "object"
+      },
+      "RunEvent": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "payload": {},
+          "run_id": {
+            "type": "string"
+          },
+          "timestamp_ms": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "payload",
+          "run_id",
+          "timestamp_ms",
+          "type"
+        ],
+        "type": "object"
+      },
+      "RunParameters": {
+        "properties": {
+          "duration_seconds": {
+            "type": "integer"
+          },
+          "rps_target": {
+            "type": "integer"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/RunStage"
+            },
+            "type": "array"
+          },
+          "vus_target": {
+            "type": "integer"
+          },
+          "worker_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RunStage": {
+        "properties": {
+          "duration": {
+            "type": "string"
+          },
+          "target": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "duration",
+          "target"
+        ],
+        "type": "object"
+      },
+      "RunSummary": {
+        "properties": {
+          "assertion_failures": {
+            "type": "integer"
+          },
+          "assertion_passes": {
+            "type": "integer"
+          },
+          "avg_ms": {
+            "type": "number"
+          },
+          "bytes_received": {
+            "type": "integer"
+          },
+          "bytes_sent": {
+            "type": "integer"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/CheckStat"
+            },
+            "type": "array"
+          },
+          "duration_seconds": {
+            "type": "number"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointStat"
+            },
+            "type": "array"
+          },
+          "error_rate": {
+            "type": "number"
+          },
+          "failed_requests": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "max_ms": {
+            "type": "number"
+          },
+          "min_ms": {
+            "type": "number"
+          },
+          "p50_ms": {
+            "type": "number"
+          },
+          "p90_ms": {
+            "type": "number"
+          },
+          "p95_ms": {
+            "type": "number"
+          },
+          "p99_ms": {
+            "type": "number"
+          },
+          "peak_vus": {
+            "type": "integer"
+          },
+          "thresholds_passed": {
+            "type": "boolean"
+          },
+          "throughput_rps": {
+            "type": "number"
+          },
+          "total_requests": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assertion_failures",
+          "assertion_passes",
+          "avg_ms",
+          "bytes_received",
+          "bytes_sent",
+          "duration_seconds",
+          "error_rate",
+          "failed_requests",
+          "iterations",
+          "max_ms",
+          "min_ms",
+          "p50_ms",
+          "p90_ms",
+          "p95_ms",
+          "p99_ms",
+          "peak_vus",
+          "thresholds_passed",
+          "throughput_rps",
+          "total_requests"
+        ],
+        "type": "object"
+      },
+      "SavedRequest": {
+        "properties": {
+          "auth_config": {},
+          "auth_type": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "body_type": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "method": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_config",
+          "auth_type",
+          "body",
+          "body_type",
+          "headers",
+          "method",
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "SessionResponse": {
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "setup_required": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Principal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "authenticated",
+          "mode",
+          "setup_required"
+        ],
+        "type": "object"
+      },
+      "Settings": {
+        "properties": {
+          "appearance": {
+            "properties": {
+              "density": {
+                "type": "string"
+              },
+              "palette": {
+                "type": "string"
+              },
+              "theme": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "density",
+              "palette",
+              "theme"
+            ],
+            "type": "object"
+          },
+          "general": {
+            "properties": {
+              "default_environment_id": {
+                "type": "string"
+              },
+              "default_template": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "default_environment_id",
+              "default_template"
+            ],
+            "type": "object"
+          },
+          "integrations": {
+            "properties": {
+              "slack_webhook_url": {
+                "type": "string"
+              },
+              "webhook_url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slack_webhook_url",
+              "webhook_url"
+            ],
+            "type": "object"
+          },
+          "storage": {
+            "properties": {
+              "retention_count": {
+                "type": "integer"
+              },
+              "retention_days": {
+                "type": "integer"
+              },
+              "retention_mode": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "retention_count",
+              "retention_days",
+              "retention_mode"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "appearance",
+          "general",
+          "integrations",
+          "storage"
+        ],
+        "type": "object"
+      },
+      "StartCrawlRequest": {
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/CrawlAuthConfig"
+          },
+          "blocklist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "entry_url": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "openapi_url": {
+            "type": "string"
+          },
+          "same_origin": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "entry_url"
+        ],
+        "type": "object"
+      },
+      "StartRunRequest": {
+        "properties": {
+          "environment_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parameters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunParameters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id"
+        ],
+        "type": "object"
+      },
+      "StatusResponse": {
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "StorageInfo": {
+        "properties": {
+          "data_dir": {
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          },
+          "database_bytes": {
+            "type": "integer"
+          },
+          "prunable_bytes_est": {
+            "type": "integer"
+          },
+          "prunable_runs": {
+            "type": "integer"
+          },
+          "retention": {
+            "properties": {
+              "retention_count": {
+                "type": "integer"
+              },
+              "retention_days": {
+                "type": "integer"
+              },
+              "retention_mode": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "retention_count",
+              "retention_days",
+              "retention_mode"
+            ],
+            "type": "object"
+          },
+          "runs": {
+            "type": "integer"
+          },
+          "samples_bytes": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data_dir",
+          "database",
+          "database_bytes",
+          "prunable_bytes_est",
+          "prunable_runs",
+          "retention",
+          "runs",
+          "samples_bytes"
+        ],
+        "type": "object"
+      },
+      "SystemInfo": {
+        "properties": {
+          "artifacts": {
+            "type": "string"
+          },
+          "data_dir": {
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/Execution"
+          },
+          "k6": {
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "kv": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "available",
+              "kv",
+              "version"
+            ],
+            "type": "object"
+          },
+          "live_control": {
+            "properties": {
+              "duration": {
+                "type": "boolean"
+              },
+              "rps": {
+                "type": "boolean"
+              },
+              "vus": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "duration",
+              "rps",
+              "vus"
+            ],
+            "type": "object"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "team_mode": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          },
+          "websocket": {
+            "properties": {
+              "clients": {
+                "type": "integer"
+              },
+              "dropped_frames": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "clients",
+              "dropped_frames"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "artifacts",
+          "data_dir",
+          "database",
+          "execution",
+          "k6",
+          "live_control",
+          "mode",
+          "os",
+          "team_mode",
+          "version",
+          "websocket"
+        ],
+        "type": "object"
+      },
+      "TimingBreakdown": {
+        "properties": {
+          "connect_ms": {
+            "type": "number"
+          },
+          "dns_ms": {
+            "type": "number"
+          },
+          "receive_ms": {
+            "type": "number"
+          },
+          "send_ms": {
+            "type": "number"
+          },
+          "tls_ms": {
+            "type": "number"
+          },
+          "total_ms": {
+            "type": "number"
+          },
+          "wait_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "connect_ms",
+          "dns_ms",
+          "receive_ms",
+          "send_ms",
+          "tls_ms",
+          "total_ms",
+          "wait_ms"
+        ],
+        "type": "object"
+      },
+      "TokenName": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "UpdateEnvironmentRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "variables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Variable"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "variables"
+        ],
+        "type": "object"
+      },
+      "UpdatePlanRequest": {
+        "properties": {
+          "default_environment_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "root": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "description",
+          "name",
+          "root",
+          "tags"
+        ],
+        "type": "object"
+      },
+      "User": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "display_name",
+          "email",
+          "id",
+          "role"
+        ],
+        "type": "object"
+      },
+      "UserRequest": {
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      },
+      "ValidateResponse": {
+        "properties": {
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "errors",
+          "valid"
+        ],
+        "type": "object"
+      },
+      "Variable": {
+        "properties": {
+          "secret": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "value"
+        ],
+        "type": "object"
+      },
+      "VersionResponse": {
+        "properties": {
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "REST API of the OpenSynapse control plane. Authenticate with `Authorization: Bearer \u003ctoken\u003e`: the installation token in local mode (Settings › About), or a session or personal API token in team mode.",
+    "title": "OpenSynapse API",
+    "version": "dev"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/ai/analyse": {
+      "post": {
+        "operationId": "postAiAnalyse",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIAnalysis"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Analyse a run or comparison (sends data to the provider)",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/v1/ai/config": {
+      "get": {
+        "operationId": "getAiConfig",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIConfig"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "AI configuration (key masked)",
+        "tags": [
+          "AI"
+        ]
+      },
+      "put": {
+        "operationId": "putAiConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIConfig"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update AI configuration (admin)",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/v1/ai/config/test": {
+      "post": {
+        "operationId": "postAiConfigTest",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyTest"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Validate the configured key (sends one minimal request to the provider)",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/v1/ai/preview": {
+      "post": {
+        "operationId": "postAiPreview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptPreview"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Preview exactly what Analyse would send",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "postAuthLogin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign in (team mode)",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "postAuthLogout",
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Sign out",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "getAuthMe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Principal"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Current user",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password": {
+      "put": {
+        "operationId": "putAuthPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Change your password",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "getAuthSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "How to authenticate; hands the UI the install token in local mode",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/setup": {
+      "post": {
+        "operationId": "postAuthSetup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Create the first admin (team mode)",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/tokens": {
+      "get": {
+        "operationId": "getAuthTokens",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsAPIToken"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List your API tokens",
+        "tags": [
+          "Auth"
+        ]
+      },
+      "post": {
+        "operationId": "postAuthTokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedToken"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create an API token (shown once)",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/tokens/{id}": {
+      "delete": {
+        "operationId": "deleteAuthTokensId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Revoke an API token",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/compare": {
+      "post": {
+        "operationId": "postCompare",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonResult"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Compare 2–5 runs against the first",
+        "tags": [
+          "Reports"
+        ]
+      }
+    },
+    "/api/v1/crawls": {
+      "post": {
+        "operationId": "postCrawls",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartCrawlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Crawl"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Start a crawl or OpenAPI import",
+        "tags": [
+          "Crawler"
+        ]
+      }
+    },
+    "/api/v1/crawls/{id}": {
+      "get": {
+        "operationId": "getCrawlsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Crawl"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Crawl status and results",
+        "tags": [
+          "Crawler"
+        ]
+      }
+    },
+    "/api/v1/crawls/{id}/cancel": {
+      "post": {
+        "operationId": "postCrawlsIdCancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Cancel a crawl",
+        "tags": [
+          "Crawler"
+        ]
+      }
+    },
+    "/api/v1/crawls/{id}/generate-plan": {
+      "post": {
+        "operationId": "postCrawlsIdGeneratePlan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Generate a draft plan",
+        "tags": [
+          "Crawler"
+        ]
+      }
+    },
+    "/api/v1/crawls/{id}/graph": {
+      "get": {
+        "operationId": "getCrawlsIdGraph",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlGraph"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Crawl graph",
+        "tags": [
+          "Crawler"
+        ]
+      }
+    },
+    "/api/v1/diagnostics": {
+      "post": {
+        "operationId": "postDiagnostics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Download a diagnostics bundle without secrets (admin)",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/environments": {
+      "get": {
+        "operationId": "getEnvironments",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResultEnvironment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List environments (secrets redacted)",
+        "tags": [
+          "Environments"
+        ]
+      },
+      "post": {
+        "operationId": "postEnvironments",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create an environment",
+        "tags": [
+          "Environments"
+        ]
+      }
+    },
+    "/api/v1/environments/{id}": {
+      "delete": {
+        "operationId": "deleteEnvironmentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete an environment",
+        "tags": [
+          "Environments"
+        ]
+      },
+      "get": {
+        "operationId": "getEnvironmentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get an environment",
+        "tags": [
+          "Environments"
+        ]
+      },
+      "put": {
+        "operationId": "putEnvironmentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update an environment (send ******** to keep a secret)",
+        "tags": [
+          "Environments"
+        ]
+      }
+    },
+    "/api/v1/fragments": {
+      "get": {
+        "operationId": "getFragments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResultFragment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List fragments",
+        "tags": [
+          "Fragments"
+        ]
+      },
+      "post": {
+        "operationId": "postFragments",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FragmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fragment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Save a fragment",
+        "tags": [
+          "Fragments"
+        ]
+      }
+    },
+    "/api/v1/fragments/{id}": {
+      "delete": {
+        "operationId": "deleteFragmentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a fragment (built-ins cannot be deleted)",
+        "tags": [
+          "Fragments"
+        ]
+      },
+      "get": {
+        "operationId": "getFragmentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fragment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get a fragment",
+        "tags": [
+          "Fragments"
+        ]
+      },
+      "put": {
+        "operationId": "putFragmentsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FragmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fragment"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update a fragment (built-ins cannot change)",
+        "tags": [
+          "Fragments"
+        ]
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "operationId": "getPlans",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResultPlan"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List plans",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "post": {
+        "operationId": "postPlans",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a plan",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/plans/import/jmx": {
+      "post": {
+        "operationId": "postPlansImportJmx",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportJMXResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Import a JMeter .jmx file (multipart field 'file' or raw XML)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/plans/{id}": {
+      "delete": {
+        "operationId": "deletePlansId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a plan (built-in plans cannot be deleted)",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "get": {
+        "operationId": "getPlansId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get a plan",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "put": {
+        "operationId": "putPlansId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace a plan (creates a new version)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/plans/{id}/compile": {
+      "post": {
+        "operationId": "postPlansIdCompile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/javascript": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Generate the k6 script (mode=managed for the script OpenSynapse runs)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/plans/{id}/validate": {
+      "post": {
+        "operationId": "postPlansIdValidate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Validate a plan without saving",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/plans/{id}/versions": {
+      "get": {
+        "operationId": "getPlansIdVersions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsPlanVersion"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List versions",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/plans/{id}/versions/{version}": {
+      "get": {
+        "operationId": "getPlansIdVersionsVersion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanVersion"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get a version",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/v1/playground/collections": {
+      "get": {
+        "operationId": "getPlaygroundCollections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResultCollection"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List collections",
+        "tags": [
+          "Playground"
+        ]
+      },
+      "post": {
+        "operationId": "postPlaygroundCollections",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a collection",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/collections/{id}": {
+      "delete": {
+        "operationId": "deletePlaygroundCollectionsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a collection",
+        "tags": [
+          "Playground"
+        ]
+      },
+      "put": {
+        "operationId": "putPlaygroundCollectionsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update a collection",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/microtest": {
+      "post": {
+        "operationId": "postPlaygroundMicrotest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MicroTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MicroTestResult"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Run the request with up to 50 VUs for up to 60s",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/oauth/callback": {
+      "get": {
+        "operationId": "getPlaygroundOauthCallback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "OAuth redirect target (opened by the provider)",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/oauth/client-credentials": {
+      "post": {
+        "operationId": "postPlaygroundOauthClientCredentials",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientCredentialsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OauthToken"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fetch a token with the client-credentials grant",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/oauth/result": {
+      "get": {
+        "operationId": "getPlaygroundOauthResult",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OauthToken"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fetch the token from a finished OAuth flow",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/oauth/start": {
+      "post": {
+        "operationId": "postPlaygroundOauthStart",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OauthStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OauthStartResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Start an OAuth 2.0 authorization-code flow (PKCE)",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/playground/request": {
+      "post": {
+        "operationId": "postPlaygroundRequest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaygroundRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaygroundResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Send one request with timing breakdown",
+        "tags": [
+          "Playground"
+        ]
+      }
+    },
+    "/api/v1/reports": {
+      "get": {
+        "operationId": "getReports",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResultReport"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List saved comparisons",
+        "tags": [
+          "Reports"
+        ]
+      },
+      "post": {
+        "operationId": "postReports",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Save a comparison",
+        "tags": [
+          "Reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{id}": {
+      "delete": {
+        "operationId": "deleteReportsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a saved comparison",
+        "tags": [
+          "Reports"
+        ]
+      },
+      "get": {
+        "operationId": "getReportsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get a saved comparison",
+        "tags": [
+          "Reports"
+        ]
+      }
+    },
+    "/api/v1/runs": {
+      "get": {
+        "operationId": "getRuns",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResultRun"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List runs",
+        "tags": [
+          "Runs"
+        ]
+      },
+      "post": {
+        "operationId": "postRuns",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Start a run",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}": {
+      "delete": {
+        "operationId": "deleteRunsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a run and its samples",
+        "tags": [
+          "Runs"
+        ]
+      },
+      "get": {
+        "operationId": "getRunsId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get a run",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/control": {
+      "patch": {
+        "operationId": "patchRunsIdControl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveState"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Change VUs, RPS limit, duration or pause",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/control-state": {
+      "get": {
+        "operationId": "getRunsIdControlState",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlState"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Live-control state for the run's k6 control scenario (per-run token)",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/errors": {
+      "get": {
+        "operationId": "getRunsIdErrors",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsRunError"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Recent failed requests",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/events": {
+      "get": {
+        "operationId": "getRunsIdEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsRunEvent"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Run timeline events",
+        "tags": [
+          "Runs"
+        ]
+      },
+      "post": {
+        "operationId": "postRunsIdEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunEvent"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Add a note to the timeline",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/export": {
+      "post": {
+        "operationId": "postRunsIdExport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequestDoc"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Export as json, csv (raw samples), html or pdf",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/ingest": {
+      "post": {
+        "operationId": "postRunsIdIngest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Aggregated metrics from a cluster run's k6 workers (per-run token; gzip accepted)",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/kill": {
+      "post": {
+        "operationId": "postRunsIdKill",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Kill immediately",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/live": {
+      "get": {
+        "operationId": "getRunsIdLive",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveState"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Live-control state of a running test",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/report": {
+      "get": {
+        "operationId": "getRunsIdReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Full report document",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/samples": {
+      "get": {
+        "operationId": "getRunsIdSamples",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsMetricPoint"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Per-second metric series",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{id}/stop": {
+      "post": {
+        "operationId": "postRunsIdStop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Stop gracefully",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "operationId": "putSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update settings (admin)",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/storage": {
+      "get": {
+        "operationId": "getStorage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageInfo"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Storage usage and retention preview",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/storage/cleanup": {
+      "post": {
+        "operationId": "postStorageCleanup",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Apply the retention policy now (admin)",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/system/info": {
+      "get": {
+        "operationId": "getSystemInfo",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Installation and engine capabilities",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/api/v1/system/logs": {
+      "get": {
+        "operationId": "getSystemLogs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Recent control-plane log lines (admin)",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "getUsers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsUser"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List users (admin)",
+        "tags": [
+          "Users"
+        ]
+      },
+      "post": {
+        "operationId": "postUsers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a user (admin)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "delete": {
+        "operationId": "deleteUsersId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a user (admin)",
+        "tags": [
+          "Users"
+        ]
+      },
+      "put": {
+        "operationId": "putUsersId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update a user (admin)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/v1/ws": {
+      "get": {
+        "operationId": "getWs",
+        "responses": {
+          "101": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsPayload"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "WebSocket: send {type:auth,payload:{token}}, then subscribe to runs.{id}.metrics|events|status|errors",
+        "tags": [
+          "Realtime"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Liveness probe",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "getMetrics",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Prometheus metrics for the control plane",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenapiJson",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "This OpenAPI document",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "getReady",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Readiness probe",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/version": {
+      "get": {
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Build version",
+        "tags": [
+          "System"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ]
+}

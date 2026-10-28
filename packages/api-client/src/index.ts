@@ -1,222 +1,125 @@
+// Typed client for the OpenSynapse REST API.
+//
+// The types in ./schema.d.ts are generated from the control plane's OpenAPI
+// document (`pnpm --filter @opensynapse/api-client generate`); do not edit
+// them by hand. CI regenerates them and fails if they drift.
+
+import createClient, { type Client, type Middleware } from 'openapi-fetch'
+import type { components, paths } from './schema'
+
+export type { paths, components }
+export type Schemas = components['schemas']
+
+export type Plan = Schemas['Plan']
+export type Node = Schemas['Node']
+export type PlanVersion = Schemas['PlanVersion']
+export type Environment = Schemas['Environment']
+export type Variable = Schemas['Variable']
+export type Run = Schemas['Run']
+export type RunParameters = Schemas['RunParameters']
+export type RunStage = Schemas['RunStage']
+export type RunSummary = Schemas['RunSummary']
+export type EndpointStat = Schemas['EndpointStat']
+export type CheckStat = Schemas['CheckStat']
+export type MetricPoint = Schemas['MetricPoint']
+export type RunError = Schemas['RunError']
+export type RunEvent = Schemas['RunEvent']
+export type RunReport = Schemas['Document']
+export type LiveState = Schemas['LiveState']
+export type Fragment = Schemas['Fragment']
+export type Binding = Schemas['Binding']
+export type Crawl = Schemas['Crawl']
+export type CapturedRequest = Schemas['CapturedRequest']
+export type Collection = Schemas['Collection']
+export type SavedRequest = Schemas['SavedRequest']
+export type PlaygroundRequest = Schemas['PlaygroundRequest']
+export type PlaygroundResponse = Schemas['PlaygroundResponse']
+export type MicroTestResult = Schemas['MicroTestResult']
+export type AIConfig = Schemas['AIConfig']
+export type AIAnalysis = Schemas['AIAnalysis']
+export type Settings = Schemas['Settings']
+export type SystemInfo = Schemas['SystemInfo']
+export type User = Schemas['User']
+export type APIToken = Schemas['APIToken']
+export type Principal = Schemas['Principal']
+export type Session = Schemas['SessionResponse']
+export type Comparison = Schemas['ComparisonResult']
+export type MetricChange = Schemas['MetricChange']
+export type ImportLog = Schemas['ImportLog']
+
+/** A structured API error (docs/04-data-model-and-api.md section 4). */
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string
+  readonly details?: unknown
+
+  constructor(status: number, code: string, message: string, details?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.details = details
+  }
+}
+
+export interface ClientOptions {
+  /** Origin to call; defaults to the page's own origin. */
+  baseUrl?: string
+  /** Returns the bearer token to send, if any. */
+  getToken?: () => string | null | undefined
+  /** Called when the API answers 401 (e.g. to show the sign-in screen). */
+  onUnauthorized?: () => void
+}
+
+export type ApiClient = Client<paths>
+
+/** Creates a typed client that adds the bearer token to every request. */
+export function createApiClient(opts: ClientOptions = {}): ApiClient {
+  const client = createClient<paths>({ baseUrl: opts.baseUrl ?? '' })
+  const auth: Middleware = {
+    onRequest({ request }) {
+      const token = opts.getToken?.()
+      if (token && !request.headers.has('Authorization')) {
+        request.headers.set('Authorization', `Bearer ${token}`)
+      }
+      return request
+    },
+    onResponse({ response }) {
+      if (response.status === 401) opts.onUnauthorized?.()
+      return response
+    },
+  }
+  client.use(auth)
+  return client
+}
+
+/** Turns an error body (or a thrown network error) into an ApiError. */
+export function toApiError(error: unknown, response?: Response): ApiError {
+  const status = response?.status ?? 0
+  const body = error as { error?: { code?: string; message?: string; details?: unknown } } | undefined
+  if (body?.error?.message) {
+    return new ApiError(status, body.error.code ?? 'ERROR', body.error.message, body.error.details)
+  }
+  if (error instanceof Error) return new ApiError(status, 'NETWORK_ERROR', error.message)
+  return new ApiError(status, 'ERROR', response ? `Request failed (${response.status})` : 'Request failed')
+}
+
 /**
- * OpenSynapse API client.
+ * Unwraps an openapi-fetch result: returns the data or throws an ApiError.
  *
- * Hand-written for Phase 1. Will be auto-generated from OpenAPI spec
- * via openapi-typescript in a later phase.
+ *   const plans = await unwrap(api.GET('/api/v1/plans'))
  */
-
-// --- Types matching the OpenAPI spec ---
-
-export interface Node {
-  id: string
-  type: string
-  name: string
-  enabled: boolean
-  properties: Record<string, unknown>
-  children: Node[]
-}
-
-export interface Plan {
-  id: string
-  name: string
-  description: string
-  tags: string[]
-  created_at: string
-  updated_at: string
-  version: number
-  default_environment_id: string | null
-  root: Node
-}
-
-export interface PlanVersion {
-  id: string
-  plan_id: string
-  version: number
-  root: Node
-  name: string
-  description: string
-  tags: string[]
-  created_at: string
-}
-
-export interface Variable {
-  value: string
-  secret: boolean
-}
-
-export interface Environment {
-  id: string
-  name: string
-  variables: Record<string, Variable>
-  created_at: string
-  updated_at: string
-}
-
-export interface ListResult<T> {
-  items: T[]
-  next_cursor?: string
-}
-
-export interface ValidationResult {
-  valid: boolean
-  errors: string[]
-}
-
-export interface APIError {
-  error: {
-    code: string
-    message: string
-    details?: unknown
+export async function unwrap<T>(
+  promise: Promise<{ data?: T; error?: unknown; response: Response }>,
+): Promise<T> {
+  let result: { data?: T; error?: unknown; response: Response }
+  try {
+    result = await promise
+  } catch (e) {
+    throw toApiError(e)
   }
-}
-
-// --- Request types ---
-
-export interface CreatePlanRequest {
-  name: string
-  description?: string
-  tags?: string[]
-  default_environment_id?: string | null
-  root: Node
-}
-
-export interface UpdatePlanRequest {
-  name: string
-  description?: string
-  tags?: string[]
-  default_environment_id?: string | null
-  root: Node
-}
-
-export interface CreateEnvironmentRequest {
-  name: string
-  variables?: Record<string, Variable>
-}
-
-export interface UpdateEnvironmentRequest {
-  name: string
-  variables?: Record<string, Variable>
-}
-
-// --- Client ---
-
-export class OpenSynapseClient {
-  private baseUrl: string
-
-  constructor(baseUrl: string = '/api/v1') {
-    this.baseUrl = baseUrl
+  if (result.error !== undefined || !result.response.ok) {
+    throw toApiError(result.error, result.response)
   }
-
-  // System
-  async health(): Promise<{ status: string }> {
-    return this.get('/health', true)
-  }
-
-  async version(): Promise<{ version: string }> {
-    return this.get('/version', true)
-  }
-
-  // Plans
-  async listPlans(limit?: number, cursor?: string): Promise<ListResult<Plan>> {
-    const params = new URLSearchParams()
-    if (limit) params.set('limit', String(limit))
-    if (cursor) params.set('cursor', cursor)
-    const qs = params.toString()
-    return this.get(`/plans${qs ? '?' + qs : ''}`)
-  }
-
-  async createPlan(req: CreatePlanRequest): Promise<Plan> {
-    return this.post('/plans', req)
-  }
-
-  async getPlan(id: string): Promise<Plan> {
-    return this.get(`/plans/${id}`)
-  }
-
-  async updatePlan(id: string, req: UpdatePlanRequest): Promise<Plan> {
-    return this.put(`/plans/${id}`, req)
-  }
-
-  async deletePlan(id: string): Promise<void> {
-    return this.del(`/plans/${id}`)
-  }
-
-  async listPlanVersions(id: string): Promise<{ items: PlanVersion[] }> {
-    return this.get(`/plans/${id}/versions`)
-  }
-
-  async getPlanVersion(id: string, version: number): Promise<PlanVersion> {
-    return this.get(`/plans/${id}/versions/${version}`)
-  }
-
-  async validatePlan(id: string, root: Node): Promise<ValidationResult> {
-    return this.post(`/plans/${id}/validate`, { root })
-  }
-
-  // Environments
-  async listEnvironments(limit?: number, cursor?: string): Promise<ListResult<Environment>> {
-    const params = new URLSearchParams()
-    if (limit) params.set('limit', String(limit))
-    if (cursor) params.set('cursor', cursor)
-    const qs = params.toString()
-    return this.get(`/environments${qs ? '?' + qs : ''}`)
-  }
-
-  async createEnvironment(req: CreateEnvironmentRequest): Promise<Environment> {
-    return this.post('/environments', req)
-  }
-
-  async getEnvironment(id: string): Promise<Environment> {
-    return this.get(`/environments/${id}`)
-  }
-
-  async updateEnvironment(id: string, req: UpdateEnvironmentRequest): Promise<Environment> {
-    return this.put(`/environments/${id}`, req)
-  }
-
-  async deleteEnvironment(id: string): Promise<void> {
-    return this.del(`/environments/${id}`)
-  }
-
-  // --- HTTP helpers ---
-
-  private async get<T>(path: string, absolute = false): Promise<T> {
-    const url = absolute ? path : `${this.baseUrl}${path}`
-    const res = await fetch(url)
-    if (!res.ok) throw await this.parseError(res)
-    return res.json()
-  }
-
-  private async post<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) throw await this.parseError(res)
-    return res.json()
-  }
-
-  private async put<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) throw await this.parseError(res)
-    return res.json()
-  }
-
-  private async del(path: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}${path}`, { method: 'DELETE' })
-    if (!res.ok) throw await this.parseError(res)
-  }
-
-  private async parseError(res: Response): Promise<APIError> {
-    try {
-      return await res.json()
-    } catch {
-      return { error: { code: 'UNKNOWN', message: res.statusText } }
-    }
-  }
+  return result.data as T
 }

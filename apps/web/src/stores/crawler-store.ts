@@ -1,349 +1,174 @@
 import { create } from 'zustand'
+import type { Crawl } from '@opensynapse/api-client'
+import { api, errorMessage, unwrap } from '../api'
+import { clampInt } from '../utils/number'
 
-// --- Types ---
+export type CrawlEngine = 'rod' | 'colly' | 'zap'
+export type CrawlAuthType = 'none' | 'basic' | 'bearer' | 'form_login'
+export type CrawlSource = 'site' | 'openapi'
 
-export type CrawlAuthType = 'none' | 'form_login' | 'bearer' | 'basic'
-
-export interface CrawlAuthConfig {
+export interface CrawlConfig {
+  source: CrawlSource
+  entry_url: string
+  openapi_url: string
+  engine: CrawlEngine
+  auth_type: CrawlAuthType
   username: string
   password: string
   token: string
-}
-
-export type CrawlEngine = 'rod' | 'colly' | 'zap'
-
-export interface CrawlConfig {
-  entry_url: string
-  engine: CrawlEngine
-  auth_type: CrawlAuthType
-  auth: CrawlAuthConfig
   depth: number
   same_origin: boolean
   blocklist: string
-  request_limit: number
+  limit: number
 }
 
-export type CrawlStatus = 'idle' | 'crawling' | 'completed' | 'failed'
-
-export interface CrawlProgress {
-  pages_discovered: number
-  requests_captured: number
-}
-
-export interface GraphNode {
-  url: string
-  title: string
-}
-
-export interface GraphEdge {
-  source: string
-  target: string
-}
-
-export interface CrawlGraph {
-  nodes: GraphNode[]
-  edges: GraphEdge[]
-}
-
-export interface CapturedRequest {
-  id: string
-  method: string
-  url: string
-  path: string
-  status: number
-  headers?: Record<string, string>
-  body?: string
-  response_body?: string
-}
-
-export interface OpenApiOperation {
-  method: string
-  path: string
-  summary: string
-  operationId: string
-}
-
-interface CrawlerState {
-  // Config
-  config: CrawlConfig
-
-  // Crawl state
-  crawlId: string | null
-  status: CrawlStatus
-  progress: CrawlProgress
-  error: string | null
-
-  // Results
-  graph: CrawlGraph
-  requests: CapturedRequest[]
-  selectedRequestId: string | null
-
-  // OpenAPI
-  openApiUrl: string
-  openApiOps: OpenApiOperation[]
-
-  // Config actions
-  setEntryUrl: (url: string) => void
-  setEngine: (engine: CrawlEngine) => void
-  setAuthType: (authType: CrawlAuthType) => void
-  setAuth: (auth: Partial<CrawlAuthConfig>) => void
-  setDepth: (depth: number) => void
-  setSameOrigin: (sameOrigin: boolean) => void
-  setBlocklist: (blocklist: string) => void
-  setRequestLimit: (limit: number) => void
-  setOpenApiUrl: (url: string) => void
-  setSelectedRequest: (id: string | null) => void
-
-  // Crawl actions
-  startCrawl: () => Promise<void>
-  cancelCrawl: () => Promise<void>
-  fetchOpenAPI: () => Promise<void>
-  generatePlan: () => Promise<string | null>
-  pollProgress: () => Promise<void>
-  reset: () => void
-}
-
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+const LAST_CRAWL_KEY = 'opensynapse.lastCrawl'
 
 const defaultConfig: CrawlConfig = {
+  source: 'site',
   entry_url: '',
-  engine: 'rod',
+  openapi_url: '',
+  engine: 'colly',
   auth_type: 'none',
-  auth: { username: '', password: '', token: '' },
+  username: '',
+  password: '',
+  token: '',
   depth: 3,
   same_origin: true,
   blocklist: '/logout, /delete',
-  request_limit: 500,
+  limit: 500,
 }
 
-export const useCrawlerStore = create<CrawlerState>((set, get) => ({
-  config: { ...defaultConfig },
-  crawlId: null,
-  status: 'idle',
-  progress: { pages_discovered: 0, requests_captured: 0 },
-  error: null,
-  graph: { nodes: [], edges: [] },
-  requests: [],
-  selectedRequestId: null,
-  openApiUrl: '',
-  openApiOps: [],
+interface State {
+  config: CrawlConfig
+  crawl: Crawl | null
+  starting: boolean
+  error: string | null
+  setConfig: (patch: Partial<CrawlConfig>) => void
+  start: () => Promise<void>
+  cancel: () => Promise<void>
+  restore: () => Promise<void>
+  generatePlan: () => Promise<string | null>
+  reset: () => void
+}
 
-  setEntryUrl: (url) =>
-    set((s) => ({ config: { ...s.config, entry_url: url } })),
-  setEngine: (engine) =>
-    set((s) => ({ config: { ...s.config, engine } })),
-  setAuthType: (authType) =>
-    set((s) => ({ config: { ...s.config, auth_type: authType } })),
-  setAuth: (partial) =>
-    set((s) => ({ config: { ...s.config, auth: { ...s.config.auth, ...partial } } })),
-  setDepth: (depth) =>
-    set((s) => ({ config: { ...s.config, depth } })),
-  setSameOrigin: (same_origin) =>
-    set((s) => ({ config: { ...s.config, same_origin } })),
-  setBlocklist: (blocklist) =>
-    set((s) => ({ config: { ...s.config, blocklist } })),
-  setRequestLimit: (request_limit) =>
-    set((s) => ({ config: { ...s.config, request_limit } })),
-  setOpenApiUrl: (url) => set({ openApiUrl: url }),
-  setSelectedRequest: (id) => set({ selectedRequestId: id }),
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 
-  startCrawl: async () => {
-    const { config } = get()
-    if (!config.entry_url.trim()) {
-      set({ error: 'Entry URL is required' })
-      return
-    }
+function stopPolling() {
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = null
+}
 
-    set({
-      status: 'crawling',
-      error: null,
-      progress: { pages_discovered: 0, requests_captured: 0 },
-      graph: { nodes: [], edges: [] },
-      requests: [],
-      selectedRequestId: null,
-      openApiOps: [],
-    })
+export const isActive = (c: Crawl | null) => c?.status === 'pending' || c?.status === 'crawling'
 
+export const useCrawlerStore = create<State>((set, get) => {
+  async function poll(id: string, failures = 0) {
     try {
-      const res = await fetch('/api/v1/crawls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entry_url: config.entry_url,
-          engine: config.engine,
-          auth_type: config.auth_type,
-          auth: config.auth_type !== 'none' ? config.auth : undefined,
-          depth: config.depth,
-          same_origin: config.same_origin,
-          blocklist: config.blocklist.split(',').map((s) => s.trim()).filter(Boolean),
-          request_limit: config.request_limit,
-        }),
-      })
+      const crawl = await unwrap(api.GET('/api/v1/crawls/{id}', { params: { path: { id } } }))
+      if (get().crawl?.id !== id) return
+      set({ crawl, error: null })
+      if (isActive(crawl)) pollTimer = setTimeout(() => poll(id), 1500)
+    } catch (e) {
+      if (get().crawl?.id !== id) return
+      // Ride out brief network blips; give up after about half a minute.
+      if (failures < 10) pollTimer = setTimeout(() => poll(id, failures + 1), 3000)
+      else set({ error: `Lost track of the crawl: ${errorMessage(e)}` })
+    }
+  }
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
-        set({ status: 'failed', error: `Failed to start crawl: ${res.status} ${text}` })
+  return {
+    config: { ...defaultConfig },
+    crawl: null,
+    starting: false,
+    error: null,
+
+    setConfig: (patch) => set({ config: { ...get().config, ...patch } }),
+
+    start: async () => {
+      const c = get().config
+      const url = c.source === 'openapi' ? c.openapi_url.trim() : c.entry_url.trim()
+      if (!url) {
+        set({ error: c.source === 'openapi' ? 'Enter the URL of an OpenAPI or Swagger document' : 'Enter the URL to start crawling from' })
         return
       }
-
-      const data = await res.json()
-      set({ crawlId: data.id })
-
-      // Start polling
       stopPolling()
-      pollTimer = setInterval(() => {
-        get().pollProgress()
-      }, 2000)
-    } catch {
-      set({
-        status: 'failed',
-        error: 'Could not reach the backend. Make sure the server is running.',
-      })
-    }
-  },
-
-  cancelCrawl: async () => {
-    const { crawlId } = get()
-    if (!crawlId) return
-
-    stopPolling()
-
-    try {
-      await fetch(`/api/v1/crawls/${crawlId}/cancel`, { method: 'POST' })
-    } catch {
-      // Best effort
-    }
-
-    set({ status: 'idle' })
-  },
-
-  fetchOpenAPI: async () => {
-    const { openApiUrl } = get()
-    if (!openApiUrl.trim()) {
-      set({ error: 'OpenAPI URL is required' })
-      return
-    }
-
-    set({
-      status: 'crawling',
-      error: null,
-      progress: { pages_discovered: 0, requests_captured: 0 },
-      graph: { nodes: [], edges: [] },
-      requests: [],
-      selectedRequestId: null,
-      openApiOps: [],
-    })
-
-    try {
-      const res = await fetch('/api/v1/crawls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ openapi_url: openApiUrl }),
-      })
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
-        set({ status: 'failed', error: `Failed to fetch OpenAPI spec: ${res.status} ${text}` })
-        return
+      set({ starting: true, error: null, crawl: null })
+      try {
+        const body =
+          c.source === 'openapi'
+            ? { entry_url: url, openapi_url: url }
+            : {
+                entry_url: url,
+                engine: c.engine,
+                depth: clampInt(c.depth, 1, 10, 3),
+                same_origin: c.same_origin,
+                limit: clampInt(c.limit, 1, 5000, 500),
+                blocklist: c.blocklist.split(',').map((s) => s.trim()).filter(Boolean),
+                auth: c.auth_type === 'none' ? undefined : { type: c.auth_type, username: c.username, password: c.password, token: c.token },
+              }
+        const crawl = await unwrap(api.POST('/api/v1/crawls', { body }))
+        try {
+          localStorage.setItem(LAST_CRAWL_KEY, crawl.id)
+        } catch {
+          // Remembering the last crawl is a convenience only.
+        }
+        set({ crawl, starting: false })
+        poll(crawl.id)
+      } catch (e) {
+        set({ starting: false, error: errorMessage(e) })
       }
+    },
 
-      const data = await res.json()
-      set({
-        crawlId: data.id,
-        status: 'completed',
-        openApiOps: data.operations ?? [],
-        progress: {
-          pages_discovered: data.operations?.length ?? 0,
-          requests_captured: data.operations?.length ?? 0,
-        },
-      })
-    } catch {
-      set({
-        status: 'failed',
-        error: 'Could not reach the backend. Make sure the server is running.',
-      })
-    }
-  },
-
-  pollProgress: async () => {
-    const { crawlId, status } = get()
-    if (!crawlId || status !== 'crawling') {
-      stopPolling()
-      return
-    }
-
-    try {
-      const res = await fetch(`/api/v1/crawls/${crawlId}`)
-      if (!res.ok) return
-
-      const data = await res.json()
-
-      set({
-        progress: {
-          pages_discovered: data.progress?.pages_discovered ?? 0,
-          requests_captured: data.progress?.requests_captured ?? 0,
-        },
-        graph: data.graph ?? get().graph,
-        requests: data.requests ?? get().requests,
-      })
-
-      if (data.status === 'completed' || data.status === 'failed') {
+    cancel: async () => {
+      const crawl = get().crawl
+      if (!crawl) return
+      try {
+        await unwrap(api.POST('/api/v1/crawls/{id}/cancel', { params: { path: { id: crawl.id } } }))
         stopPolling()
-        set({
-          status: data.status,
-          graph: data.graph ?? get().graph,
-          requests: data.requests ?? get().requests,
-          error: data.status === 'failed' ? (data.error_message ?? 'Crawl failed') : null,
-        })
+        poll(crawl.id)
+      } catch (e) {
+        set({ error: errorMessage(e) })
       }
-    } catch {
-      // Polling failure is transient; keep trying
-    }
-  },
+    },
 
-  generatePlan: async () => {
-    const { crawlId } = get()
-    if (!crawlId) return null
+    restore: async () => {
+      if (get().crawl) return
+      let id: string | null
+      try {
+        id = localStorage.getItem(LAST_CRAWL_KEY)
+      } catch {
+        return
+      }
+      if (!id) return
+      try {
+        const crawl = await unwrap(api.GET('/api/v1/crawls/{id}', { params: { path: { id } } }))
+        set({ crawl })
+        if (isActive(crawl)) poll(crawl.id)
+      } catch {
+        // The crawl was deleted or the data directory changed.
+      }
+    },
 
-    try {
-      const res = await fetch(`/api/v1/crawls/${crawlId}/generate-plan`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => res.statusText)
-        set({ error: `Failed to generate plan: ${res.status} ${text}` })
+    generatePlan: async () => {
+      const crawl = get().crawl
+      if (!crawl) return null
+      try {
+        const plan = await unwrap(api.POST('/api/v1/crawls/{id}/generate-plan', { params: { path: { id: crawl.id } } }))
+        return plan.id
+      } catch (e) {
+        set({ error: errorMessage(e) })
         return null
       }
+    },
 
-      const data = await res.json()
-      return data.id ?? null
-    } catch {
-      set({ error: 'Could not reach the backend.' })
-      return null
-    }
-  },
-
-  reset: () => {
-    stopPolling()
-    set({
-      config: { ...defaultConfig },
-      crawlId: null,
-      status: 'idle',
-      progress: { pages_discovered: 0, requests_captured: 0 },
-      error: null,
-      graph: { nodes: [], edges: [] },
-      requests: [],
-      selectedRequestId: null,
-      openApiUrl: '',
-      openApiOps: [],
-    })
-  },
-}))
+    reset: () => {
+      stopPolling()
+      try {
+        localStorage.removeItem(LAST_CRAWL_KEY)
+      } catch {
+        // ignore
+      }
+      set({ crawl: null, error: null })
+    },
+  }
+})

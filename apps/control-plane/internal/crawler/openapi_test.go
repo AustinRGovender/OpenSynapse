@@ -574,3 +574,73 @@ func TestGeneratePlanMultipleRequiredQueryParams(t *testing.T) {
 		t.Fatalf("expected second query param with '&', got %s", props)
 	}
 }
+
+func TestParseSpecYAMLWithPathLevelParameters(t *testing.T) {
+	spec, err := ParseSpec([]byte(`
+openapi: 3.0.0
+info: {title: Y, version: "1"}
+paths:
+  /items/{id}:
+    summary: An item
+    parameters:
+      - {name: id, in: path, required: true, example: 42}
+    get:
+      summary: Get item
+      responses:
+        200: {description: ok}
+`))
+	if err != nil {
+		t.Fatalf("ParseSpec: %v", err)
+	}
+	op, ok := spec.Paths["/items/{id}"]["get"]
+	if !ok || len(op.Parameters) != 1 {
+		t.Fatalf("expected GET with the path-level parameter, got %+v", spec.Paths)
+	}
+	plan := GeneratePlanFromOpenAPI(spec, "http://api.test")
+	props := string(plan.Root.Children[0].Children[0].Properties)
+	if !strings.Contains(props, "http://api.test/items/42") {
+		t.Fatalf("expected the parameter example in the URL, got %s", props)
+	}
+}
+
+func TestResolveBaseURL(t *testing.T) {
+	cases := []struct {
+		name, doc, spec, want string
+	}{
+		{"server on the document host wins", "http://shop:9002/openapi.yaml", `{"servers":[{"url":"http://localhost:9002"},{"url":"http://shop:9002/v1"}]}`, "http://shop:9002/v1"},
+		{"first server otherwise", "http://docs.test/spec.json", `{"servers":[{"url":"https://api.test/"}]}`, "https://api.test"},
+		{"relative server", "http://shop:9002/docs/openapi.json", `{"servers":[{"url":"/api"}]}`, "http://shop:9002/api"},
+		{"no servers uses the document origin", "http://shop:9002/openapi.json", `{}`, "http://shop:9002"},
+		{"swagger 2 host and base path", "http://docs.test/swagger.json", `{"swagger":"2.0","host":"api.test","basePath":"/v2","schemes":["https"]}`, "https://api.test/v2"},
+	}
+	for _, c := range cases {
+		var spec OpenAPISpec
+		if err := json.Unmarshal([]byte(c.spec), &spec); err != nil {
+			t.Fatal(err)
+		}
+		if got := ResolveBaseURL(&spec, c.doc); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestExampleBodyFromSchema(t *testing.T) {
+	spec, err := ParseSpec([]byte(`{
+		"openapi": "3.0.0",
+		"paths": {"/users": {"post": {"requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}}}}},
+		"components": {"schemas": {"User": {"type": "object", "properties": {
+			"email": {"type": "string", "format": "email"},
+			"age": {"type": "integer"},
+			"role": {"type": "string", "enum": ["admin", "user"]}
+		}}}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := spec.exampleBody(spec.Paths["/users"]["post"].RequestBody.Content["application/json"])
+	for _, want := range []string{`"email": "user@example.com"`, `"age": 0`, `"role": "admin"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body %s missing %s", body, want)
+		}
+	}
+}

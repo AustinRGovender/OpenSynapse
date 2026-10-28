@@ -42,6 +42,12 @@ GET http://localhost:9004/degradation
 - Simulate service degradation
 - Test monitoring and alerting
 
+### OpenAPI document
+```bash
+GET http://localhost:9004/openapi.yaml
+# Import it in the Crawler to draft a plan
+```
+
 ## Running
 
 ```bash

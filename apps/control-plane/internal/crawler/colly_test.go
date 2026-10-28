@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -245,4 +246,125 @@ func TestCollyEngineRequestLimit(t *testing.T) {
 	if len(requests) > cfg.Limit+1 {
 		t.Fatalf("expected at most %d requests (limit %d + root), got %d", cfg.Limit+1, cfg.Limit, len(requests))
 	}
+}
+
+// loginSite serves a login form at / (fields named by userField, plus a CSRF
+// token) and a members page that needs the session cookie it sets.
+// demoUser is the sign-in name loginSite accepts; an email field needs an
+// email, or the browser's form validation refuses to submit.
+func demoUser(userField string) string {
+	if userField == "email" {
+		return "demo@example.com"
+	}
+	return "demo"
+}
+
+func loginSite(t *testing.T, userField string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><a href="/members">Members</a>
+<form method="post" action="/session">
+  <input type="hidden" name="csrf" value="tok123">
+  <input type="%s" name="%s"><input type="password" name="pw"><button type="submit">Go</button>
+</form></body></html>`, map[bool]string{true: "email", false: "text"}[userField == "email"], userField)
+	})
+	mux.HandleFunc("/session", func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		if r.Method != http.MethodPost || r.Form.Get("csrf") != "tok123" || r.Form.Get(userField) != demoUser(userField) || r.Form.Get("pw") != "secret" {
+			http.Error(w, "bad login", http.StatusUnauthorized)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: "sid", Value: "ok", Path: "/"})
+		http.Redirect(w, r, "/members", http.StatusSeeOther)
+	})
+	mux.HandleFunc("/members", func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("sid"); err != nil || c.Value != "ok" {
+			http.Error(w, "sign in first", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><a href="/members/secret">Secret</a></body></html>`)
+	})
+	mux.HandleFunc("/members/secret", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := r.Cookie("sid"); err != nil {
+			http.Error(w, "sign in first", http.StatusForbidden)
+			return
+		}
+		fmt.Fprint(w, `<html><body>ok</body></html>`)
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestCollyFormLoginUsesTheLoginForm(t *testing.T) {
+	for _, field := range []string{"username", "email"} {
+		srv := loginSite(t, field)
+		cfg := CrawlConfig{EntryURL: srv.URL + "/", Depth: 3, SameOrigin: true, Limit: 50,
+			Auth: db.CrawlAuthConfig{Type: "form_login", Username: demoUser(field), Password: "secret"}}
+		_, reqs, err := (&CollyEngine{}).Crawl(context.Background(), cfg, nil)
+		srv.Close()
+		if err != nil {
+			t.Fatalf("%s form: %v", field, err)
+		}
+		reached := false
+		for _, r := range reqs {
+			if strings.HasSuffix(r.URL, "/members/secret") && r.StatusCode == 200 {
+				reached = true
+			}
+		}
+		if !reached {
+			t.Errorf("%s form: the crawl did not reach the members-only page as the signed-in user: %+v", field, reqs)
+		}
+	}
+}
+
+func TestCollyFormLoginReportsWrongCredentials(t *testing.T) {
+	srv := loginSite(t, "username")
+	defer srv.Close()
+	cfg := CrawlConfig{EntryURL: srv.URL + "/", Depth: 1, SameOrigin: true, Limit: 10,
+		Auth: db.CrawlAuthConfig{Type: "form_login", Username: "demo", Password: "wrong"}}
+	_, _, err := (&CollyEngine{}).Crawl(context.Background(), cfg, nil)
+	if err == nil || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("want a 401 login error, got %v", err)
+	}
+}
+
+// chainSite serves / -> /a -> /b -> /c, one link per page.
+func chainSite(t *testing.T) *httptest.Server {
+	t.Helper()
+	next := map[string]string{"/": "/a", "/a": "/b", "/b": "/c", "/c": ""}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		to, ok := next[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><a href="%s">next</a></body></html>`, to)
+	}))
+}
+
+// assertDepth checks that a depth-2 crawl of chainSite followed exactly two links.
+func assertDepth(t *testing.T, reqs []db.CapturedRequest) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, r := range reqs {
+		if u, err := url.Parse(r.URL); err == nil {
+			seen[u.Path] = true
+		}
+	}
+	if !seen["/a"] || !seen["/b"] || seen["/c"] {
+		t.Fatalf("depth 2 from the start page should reach /a and /b but not /c; visited %v", seen)
+	}
+}
+
+func TestCollyDepthCountsLinksFromTheStartPage(t *testing.T) {
+	srv := chainSite(t)
+	defer srv.Close()
+	_, reqs, err := (&CollyEngine{}).Crawl(context.Background(), CrawlConfig{EntryURL: srv.URL + "/", Depth: 2, SameOrigin: true, Limit: 50}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDepth(t, reqs)
 }

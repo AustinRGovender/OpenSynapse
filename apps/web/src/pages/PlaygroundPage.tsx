@@ -1,879 +1,674 @@
-import { useState, useCallback } from 'react'
-import {
-  usePlaygroundStore,
-} from '../stores/playground-store'
-import type {
-  HttpMethod,
-  KeyValueRow,
-  BodyType,
-  AuthType,
-  SavedRequest,
-} from '../stores/playground-store'
-
-// --- Constants ---
+import { useEffect, useMemo, useState } from 'react'
+import type { Collection, Environment, Node, Plan, PlaygroundResponse } from '@opensynapse/api-client'
+import { api, errorMessage, unwrap } from '../api'
+import { useChartTheme } from '../components/run-view/chart-theme'
+import { MetricChart } from '../components/run-view/MetricChart'
+import { Badge, Button, Card, EmptyState, Field, Modal, Select, Spinner, TextInput } from '../components/ui/primitives'
+import { createNode, NODE_TYPES } from '../config/nodes'
+import { canEdit, useAuthStore } from '../stores/auth-store'
+import { type AuthType, type BodyType, type HttpMethod, type KeyValueRow, usePlaygroundStore } from '../stores/playground-store'
+import { useToast } from '../stores/ui-store'
+import { formatBytes, formatMs, formatNumber } from '../utils/format'
+import { clampInt } from '../utils/number'
 
 const METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
-const METHOD_COLORS: Record<HttpMethod, string> = {
-  GET: 'bg-teal-600/20 text-teal-400 border-teal-600/30',
-  POST: 'bg-violet-600/20 text-violet-400 border-violet-600/30',
-  PUT: 'bg-amber-600/20 text-amber-400 border-amber-600/30',
-  PATCH: 'bg-amber-600/20 text-amber-400 border-amber-600/30',
-  DELETE: 'bg-red-600/20 text-red-400 border-red-600/30',
-  HEAD: 'bg-slate-600/20 text-slate-400 border-slate-600/30',
-  OPTIONS: 'bg-slate-600/20 text-slate-400 border-slate-600/30',
-}
-
-const METHOD_SELECT_COLORS: Record<HttpMethod, string> = {
+const METHOD_TONE: Record<string, string> = {
   GET: 'text-teal-400',
   POST: 'text-violet-400',
   PUT: 'text-amber-400',
   PATCH: 'text-amber-400',
   DELETE: 'text-red-400',
-  HEAD: 'text-slate-400',
-  OPTIONS: 'text-slate-400',
 }
 
-type RequestTab = 'params' | 'headers' | 'body' | 'auth'
-type ResponseTab = 'body' | 'headers' | 'timing'
+const AUTH_LABELS: Record<AuthType, string> = {
+  none: 'No auth',
+  basic: 'Basic',
+  bearer: 'Bearer token',
+  api_key: 'API key',
+  digest: 'Digest',
+  oauth2: 'OAuth 2.0',
+  inherit: 'Inherit from environment',
+}
 
-const TIMING_SEGMENTS: Array<{ key: string; label: string; color: string }> = [
+const TIMING_SEGMENTS = [
   { key: 'dns_ms', label: 'DNS', color: 'bg-sky-500' },
   { key: 'connect_ms', label: 'Connect', color: 'bg-teal-500' },
   { key: 'tls_ms', label: 'TLS', color: 'bg-violet-500' },
   { key: 'send_ms', label: 'Send', color: 'bg-amber-500' },
-  { key: 'wait_ms', label: 'Wait', color: 'bg-rose-500' },
+  { key: 'wait_ms', label: 'Waiting (TTFB)', color: 'bg-rose-500' },
   { key: 'receive_ms', label: 'Receive', color: 'bg-green-500' },
-]
+] as const
 
-// --- Helpers ---
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+function statusTone(status: number) {
+  if (status >= 500) return 'text-red-400'
+  if (status >= 400) return 'text-amber-400'
+  if (status >= 300) return 'text-sky-400'
+  return 'text-green-400'
 }
 
-function statusColorClass(status: number): string {
-  if (status >= 200 && status < 300) return 'text-green-400 bg-green-500/20'
-  if (status >= 300 && status < 400) return 'text-yellow-400 bg-yellow-500/20'
-  return 'text-red-400 bg-red-500/20'
-}
-
-function tryPrettyJson(str: string): string {
+function pretty(body: string): string {
   try {
-    return JSON.stringify(JSON.parse(str), null, 2)
+    return JSON.stringify(JSON.parse(body), null, 2)
   } catch {
-    return str
+    return body
   }
 }
 
-function groupByCollection(items: SavedRequest[]): Record<string, Array<{ item: SavedRequest; index: number }>> {
-  const groups: Record<string, Array<{ item: SavedRequest; index: number }>> = {}
-  items.forEach((item, index) => {
-    const col = item.collection || 'Unsorted'
-    if (!groups[col]) groups[col] = []
-    groups[col].push({ item, index })
-  })
-  return groups
+function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: [T, string][]; value: T; onChange: (t: T) => void; label: string }) {
+  return (
+    <div role="tablist" aria-label={label} className="flex gap-1 border-b border-slate-800 px-3">
+      {tabs.map(([key, text]) => (
+        <button
+          key={key}
+          role="tab"
+          type="button"
+          aria-selected={value === key}
+          onClick={() => onChange(key)}
+          className={`-mb-px border-b-2 px-2.5 py-2 text-xs font-medium ${value === key ? 'border-teal-500 text-teal-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  )
 }
 
-// --- Sub-components ---
-
-function KeyValueEditor({
-  rows,
-  onChange,
-  showEnabled,
-}: {
-  rows: KeyValueRow[]
-  onChange: (rows: KeyValueRow[]) => void
-  showEnabled?: boolean
-}) {
-  const updateRow = (idx: number, updates: Partial<KeyValueRow>) => {
-    const next = rows.map((r, i) => (i === idx ? { ...r, ...updates } : r))
+function KeyValueEditor({ rows, onChange, keyPlaceholder }: { rows: KeyValueRow[]; onChange: (rows: KeyValueRow[]) => void; keyPlaceholder: string }) {
+  function update(i: number, patch: Partial<KeyValueRow>) {
+    const next = rows.map((r, j) => (j === i ? { ...r, ...patch } : r))
+    // Keep one blank row at the end to type into.
+    if (next[next.length - 1].key || next[next.length - 1].value) next.push({ key: '', value: '', enabled: true })
     onChange(next)
   }
-
-  const addRow = () => {
-    onChange([...rows, { key: '', value: '', enabled: true }])
-  }
-
-  const removeRow = (idx: number) => {
-    if (rows.length <= 1) {
-      onChange([{ key: '', value: '', enabled: true }])
-      return
-    }
-    onChange(rows.filter((_, i) => i !== idx))
-  }
-
   return (
-    <div className="space-y-1.5">
-      {rows.map((row, idx) => (
-        <div key={idx} className="flex items-center gap-2">
-          {showEnabled && (
-            <input
-              type="checkbox"
-              checked={row.enabled}
-              onChange={(e) => updateRow(idx, { enabled: e.target.checked })}
-              className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 accent-teal-500"
-            />
-          )}
-          <input
-            type="text"
-            value={row.key}
-            onChange={(e) => updateRow(idx, { key: e.target.value })}
-            placeholder="Key"
-            className="flex-1 rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-          />
-          <input
-            type="text"
-            value={row.value}
-            onChange={(e) => updateRow(idx, { value: e.target.value })}
-            placeholder="Value"
-            className="flex-1 rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-          />
-          <button
-            onClick={() => removeRow(idx)}
-            className="rounded px-1.5 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-red-400"
-            title="Remove row"
-          >
-            x
-          </button>
+    <div className="space-y-1.5 p-3">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input type="checkbox" checked={r.enabled} onChange={(e) => update(i, { enabled: e.target.checked })} aria-label="Enabled" className="accent-teal-500" />
+          <TextInput value={r.key} onChange={(e) => update(i, { key: e.target.value })} placeholder={keyPlaceholder} aria-label="Name" />
+          <TextInput value={r.value} onChange={(e) => update(i, { value: e.target.value })} placeholder="Value" aria-label="Value" />
+          <button type="button" aria-label="Remove row" disabled={rows.length === 1} onClick={() => onChange(rows.filter((_, j) => j !== i))} className="px-1 text-slate-500 hover:text-red-400 disabled:invisible">✕</button>
         </div>
       ))}
-      <button
-        onClick={addRow}
-        className="rounded px-2 py-1 text-xs text-teal-400 hover:bg-slate-800"
-      >
-        + Add row
-      </button>
     </div>
   )
 }
 
-function MethodBadge({ method }: { method: HttpMethod }) {
-  return (
-    <span
-      className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none ${METHOD_COLORS[method]}`}
-    >
-      {method}
-    </span>
-  )
-}
+function useOAuthFlow() {
+  const toast = useToast()
+  const { auth, setAuth } = usePlaygroundStore()
+  const [busy, setBusy] = useState(false)
 
-// --- Main component ---
-
-export function PlaygroundPage({ onBack }: { onBack: () => void }) {
-  const store = usePlaygroundStore()
-
-  const [requestTab, setRequestTab] = useState<RequestTab>('params')
-  const [responseTab, setResponseTab] = useState<ResponseTab>('body')
-  const [prettyPrint, setPrettyPrint] = useState(true)
-  const [saveModalOpen, setSaveModalOpen] = useState(false)
-  const [saveName, setSaveName] = useState('')
-  const [saveCollection, setSaveCollection] = useState('Default')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-
-  const handleSend = useCallback(() => {
-    store.sendRequest()
-  }, [store])
-
-  const handleSaveToCollection = useCallback(() => {
-    if (!saveName.trim()) return
-    store.saveToCollection(saveName.trim(), saveCollection.trim() || 'Default')
-    setSaveName('')
-    setSaveModalOpen(false)
-  }, [store, saveName, saveCollection])
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-        handleSend()
-      }
-    },
-    [handleSend],
-  )
-
-  const grouped = groupByCollection(store.collections)
-
-  const reqTabClass = (tab: RequestTab) =>
-    `px-3 py-1.5 text-xs font-medium rounded-t transition-colors ${
-      requestTab === tab
-        ? 'bg-slate-800 text-slate-100 border-b-2 border-teal-500'
-        : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
-    }`
-
-  const resTabClass = (tab: ResponseTab) =>
-    `px-3 py-1.5 text-xs font-medium rounded-t transition-colors ${
-      responseTab === tab
-        ? 'bg-slate-800 text-slate-100 border-b-2 border-teal-500'
-        : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
-    }`
-
-  return (
-    <div className="flex h-screen flex-col bg-slate-950 text-slate-100" onKeyDown={handleKeyDown}>
-      {/* Header */}
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-6 py-3">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="rounded px-2 py-1 text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-          >
-            &larr; Home
-          </button>
-          <div className="h-4 w-px bg-slate-800" />
-          <h1 className="text-lg font-semibold tracking-tight">Playground</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSaveModalOpen(true)}
-            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800"
-          >
-            Save to Collection
-          </button>
-          <button
-            onClick={() => store.setSaveToPlanOpen(true)}
-            className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500"
-          >
-            Save to Plan
-          </button>
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-        {/* Collections sidebar */}
-        {sidebarOpen && (
-          <aside className="flex w-52 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
-            <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-              <span className="text-xs font-semibold text-slate-400">Collections</span>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="rounded px-1 py-0.5 text-xs text-slate-500 hover:bg-slate-800 hover:text-slate-300"
-                title="Collapse sidebar"
-              >
-                &lsaquo;
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-2 py-2">
-              {store.collections.length === 0 && (
-                <p className="px-1 text-xs text-slate-600">No saved requests yet.</p>
-              )}
-              {Object.entries(grouped).map(([col, items]) => (
-                <div key={col} className="mb-3">
-                  <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                    {col}
-                  </p>
-                  {items.map(({ item, index }) => (
-                    <button
-                      key={index}
-                      onClick={() => store.loadFromCollection(index)}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800"
-                    >
-                      <MethodBadge method={item.method} />
-                      <span className="flex-1 truncate text-xs text-slate-300">{item.name}</span>
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </aside>
-        )}
-
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="flex w-8 shrink-0 items-center justify-center border-r border-slate-800 bg-slate-950 text-slate-500 hover:bg-slate-900 hover:text-slate-300"
-            title="Expand sidebar"
-          >
-            <span className="text-xs">&rsaquo;</span>
-          </button>
-        )}
-
-        {/* Main content */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* Request builder */}
-          <div className="flex shrink-0 flex-col border-b border-slate-800">
-            {/* URL bar */}
-            <div className="flex items-center gap-2 px-4 py-3">
-              <select
-                value={store.method}
-                onChange={(e) => store.setMethod(e.target.value as HttpMethod)}
-                className={`w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-bold outline-none focus:border-teal-500 ${METHOD_SELECT_COLORS[store.method]}`}
-              >
-                {METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                value={store.url}
-                onChange={(e) => store.setUrl(e.target.value)}
-                placeholder="https://api.example.com/endpoint"
-                className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-teal-500"
-              />
-              <button
-                onClick={handleSend}
-                disabled={store.loading}
-                className="rounded-md bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {store.loading ? 'Sending...' : 'Send'}
-              </button>
-            </div>
-
-            {/* Request tabs */}
-            <div className="flex gap-0.5 border-b border-slate-800 px-4">
-              <button className={reqTabClass('params')} onClick={() => setRequestTab('params')}>
-                Params
-              </button>
-              <button className={reqTabClass('headers')} onClick={() => setRequestTab('headers')}>
-                Headers
-              </button>
-              <button className={reqTabClass('body')} onClick={() => setRequestTab('body')}>
-                Body
-              </button>
-              <button className={reqTabClass('auth')} onClick={() => setRequestTab('auth')}>
-                Auth
-              </button>
-            </div>
-
-            {/* Tab content */}
-            <div className="max-h-56 overflow-y-auto px-4 py-3">
-              {requestTab === 'params' && (
-                <KeyValueEditor rows={store.params} onChange={store.setParams} />
-              )}
-
-              {requestTab === 'headers' && (
-                <KeyValueEditor
-                  rows={store.headers}
-                  onChange={store.setHeaders}
-                  showEnabled
-                />
-              )}
-
-              {requestTab === 'body' && (
-                <BodyEditor
-                  bodyType={store.bodyType}
-                  body={store.body}
-                  onBodyTypeChange={store.setBodyType}
-                  onBodyChange={store.setBody}
-                />
-              )}
-
-              {requestTab === 'auth' && (
-                <AuthEditor
-                  authType={store.authType}
-                  authConfig={store.authConfig}
-                  onAuthTypeChange={store.setAuthType}
-                  onAuthConfigChange={store.setAuthConfig}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Response viewer */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            {store.error && (
-              <div className="mx-4 mt-3 rounded-md border border-red-800/50 bg-red-950/50 px-4 py-3 text-xs text-red-400">
-                {store.error}
-              </div>
-            )}
-
-            {store.loading && !store.response && (
-              <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-                Sending request...
-              </div>
-            )}
-
-            {!store.response && !store.loading && !store.error && (
-              <div className="flex flex-1 items-center justify-center text-sm text-slate-600">
-                Enter a URL and click Send to get started.
-              </div>
-            )}
-
-            {store.response && (
-              <>
-                {/* Status line */}
-                <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-4 py-2">
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs font-bold ${statusColorClass(store.response.status)}`}
-                  >
-                    {store.response.status} {store.response.statusText}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {store.response.duration.toFixed(0)} ms
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {formatBytes(store.response.size)}
-                  </span>
-                </div>
-
-                {/* Response tabs */}
-                <div className="flex shrink-0 gap-0.5 border-b border-slate-800 px-4">
-                  <button
-                    className={resTabClass('body')}
-                    onClick={() => setResponseTab('body')}
-                  >
-                    Body
-                  </button>
-                  <button
-                    className={resTabClass('headers')}
-                    onClick={() => setResponseTab('headers')}
-                  >
-                    Headers
-                  </button>
-                  <button
-                    className={resTabClass('timing')}
-                    onClick={() => setResponseTab('timing')}
-                  >
-                    Timing
-                  </button>
-                </div>
-
-                {/* Response tab content */}
-                <div className="min-h-0 flex-1 overflow-auto">
-                  {responseTab === 'body' && (
-                    <ResponseBodyView
-                      body={store.response.body}
-                      prettyPrint={prettyPrint}
-                      onTogglePretty={() => setPrettyPrint((p) => !p)}
-                    />
-                  )}
-
-                  {responseTab === 'headers' && (
-                    <ResponseHeadersView headers={store.response.headers} />
-                  )}
-
-                  {responseTab === 'timing' && (
-                    <TimingView timing={store.response.timing} />
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Save to Collection modal */}
-      {saveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80">
-          <div className="w-96 rounded-lg border border-slate-700 bg-slate-900 p-5">
-            <h2 className="mb-4 text-sm font-semibold text-slate-200">Save to Collection</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Request Name</label>
-                <input
-                  type="text"
-                  value={saveName}
-                  onChange={(e) => setSaveName(e.target.value)}
-                  placeholder="My Request"
-                  className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Collection</label>
-                <input
-                  type="text"
-                  value={saveCollection}
-                  onChange={(e) => setSaveCollection(e.target.value)}
-                  placeholder="Default"
-                  className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-                />
-              </div>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setSaveModalOpen(false)}
-                className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveToCollection}
-                disabled={!saveName.trim()}
-                className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 disabled:opacity-50"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Save to Plan modal */}
-      {store.saveToPlanOpen && (
-        <SaveToPlanModal onClose={() => store.setSaveToPlanOpen(false)} />
-      )}
-    </div>
-  )
-}
-
-// --- Body editor ---
-
-function BodyEditor({
-  bodyType,
-  body,
-  onBodyTypeChange,
-  onBodyChange,
-}: {
-  bodyType: BodyType
-  body: string
-  onBodyTypeChange: (t: BodyType) => void
-  onBodyChange: (b: string) => void
-}) {
-  const types: BodyType[] = ['none', 'raw', 'json', 'form']
-
-  return (
-    <div>
-      <div className="mb-2 flex gap-2">
-        {types.map((t) => (
-          <button
-            key={t}
-            onClick={() => onBodyTypeChange(t)}
-            className={`rounded px-2.5 py-1 text-xs font-medium ${
-              bodyType === t
-                ? 'bg-teal-600/20 text-teal-400'
-                : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
-            }`}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {bodyType === 'none' && (
-        <p className="text-xs text-slate-600">This request does not have a body.</p>
-      )}
-
-      {(bodyType === 'raw' || bodyType === 'json') && (
-        <textarea
-          value={body}
-          onChange={(e) => onBodyChange(e.target.value)}
-          placeholder={
-            bodyType === 'json'
-              ? '{\n  "key": "value"\n}'
-              : 'Request body...'
+  async function authorize() {
+    setBusy(true)
+    try {
+      const start = await unwrap(api.POST('/api/v1/playground/oauth/start', { body: { auth_url: auth.auth_url, token_url: auth.token_url, client_id: auth.client_id, client_secret: auth.client_secret, scope: auth.scope } }))
+      const popup = window.open(start.authorize_url, 'opensynapse-oauth', 'width=520,height=680')
+      if (!popup) throw new Error('The sign-in window was blocked; allow pop-ups for OpenSynapse and try again.')
+      // The callback page posts back once the provider redirects to it.
+      const ok = await new Promise<boolean>((resolve, reject) => {
+        const timer = setInterval(() => {
+          if (popup.closed) {
+            cleanup()
+            reject(new Error('The sign-in window was closed before it finished.'))
           }
-          className="h-32 w-full resize-y rounded border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-        />
-      )}
-
-      {bodyType === 'form' && (
-        <textarea
-          value={body}
-          onChange={(e) => onBodyChange(e.target.value)}
-          placeholder="key1=value1&key2=value2"
-          className="h-32 w-full resize-y rounded border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-        />
-      )}
-    </div>
-  )
-}
-
-// --- Auth editor ---
-
-function AuthEditor({
-  authType,
-  authConfig,
-  onAuthTypeChange,
-  onAuthConfigChange,
-}: {
-  authType: AuthType
-  authConfig: { username: string; password: string; token: string; apiKeyName: string; apiKeyValue: string; apiKeyIn: 'header' | 'query' }
-  onAuthTypeChange: (t: AuthType) => void
-  onAuthConfigChange: (c: Partial<typeof authConfig>) => void
-}) {
-  const types: AuthType[] = ['none', 'basic', 'bearer', 'apikey']
-  const labels: Record<AuthType, string> = {
-    none: 'None',
-    basic: 'Basic',
-    bearer: 'Bearer',
-    apikey: 'API Key',
+        }, 500)
+        function onMessage(e: MessageEvent) {
+          if (e.origin !== window.location.origin || e.data?.type !== 'opensynapse-oauth' || e.data.state !== start.state) return
+          cleanup()
+          resolve(!!e.data.ok)
+        }
+        function cleanup() {
+          clearInterval(timer)
+          window.removeEventListener('message', onMessage)
+        }
+        window.addEventListener('message', onMessage)
+      })
+      if (!ok) throw new Error('The provider did not grant access.')
+      const token = await unwrap(api.GET('/api/v1/playground/oauth/result', { params: { query: { state: start.state } } }))
+      setAuth({ access_token: token.access_token })
+      toast('Access token received', 'success')
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
+  async function clientCredentials() {
+    setBusy(true)
+    try {
+      const token = await unwrap(api.POST('/api/v1/playground/oauth/client-credentials', { body: { token_url: auth.token_url, client_id: auth.client_id, client_secret: auth.client_secret, scope: auth.scope } }))
+      setAuth({ access_token: token.access_token })
+      toast('Access token received', 'success')
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { busy, getToken: auth.grant_type === 'client_credentials' ? clientCredentials : authorize }
+}
+
+function AuthEditor() {
+  const { authType, auth, set, setAuth } = usePlaygroundStore()
+  const oauth = useOAuthFlow()
+  const input = (key: keyof typeof auth, label: string, type = 'text', placeholder = '') => (
+    <Field label={label}>
+      <TextInput type={type} value={auth[key]} onChange={(e) => setAuth({ [key]: e.target.value })} placeholder={placeholder} autoComplete="off" />
+    </Field>
+  )
+
   return (
-    <div>
-      <div className="mb-3 flex gap-2">
-        {types.map((t) => (
-          <button
-            key={t}
-            onClick={() => onAuthTypeChange(t)}
-            className={`rounded px-2.5 py-1 text-xs font-medium ${
-              authType === t
-                ? 'bg-teal-600/20 text-teal-400'
-                : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
-            }`}
-          >
-            {labels[t]}
-          </button>
-        ))}
-      </div>
-
-      {authType === 'none' && (
-        <p className="text-xs text-slate-600">No authentication.</p>
-      )}
-
-      {authType === 'basic' && (
-        <div className="space-y-2">
-          <input
-            type="text"
-            value={authConfig.username}
-            onChange={(e) => onAuthConfigChange({ username: e.target.value })}
-            placeholder="Username"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-          />
-          <input
-            type="password"
-            value={authConfig.password}
-            onChange={(e) => onAuthConfigChange({ password: e.target.value })}
-            placeholder="Password"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-          />
+    <div className="space-y-3 p-3">
+      <Field label="Auth type">
+        <Select value={authType} onChange={(e) => set({ authType: e.target.value as AuthType })}>
+          {(Object.keys(AUTH_LABELS) as AuthType[]).map((t) => <option key={t} value={t}>{AUTH_LABELS[t]}</option>)}
+        </Select>
+      </Field>
+      {(authType === 'basic' || authType === 'digest') && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {input('username', 'Username')}
+          {input('password', 'Password', 'password')}
+          {authType === 'digest' && <p className="text-[11px] text-slate-500 sm:col-span-2">The request is sent once, and repeated with a digest response when the server answers 401 with a challenge.</p>}
         </div>
       )}
+      {authType === 'bearer' && input('token', 'Token', 'text', 'eyJhbGciOi… or ${AUTH_TOKEN}')}
+      {authType === 'api_key' && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {input('key', 'Name', 'text', 'X-API-Key')}
+          {input('value', 'Value')}
+          <Field label="Send in">
+            <Select value={auth.add_to} onChange={(e) => setAuth({ add_to: e.target.value as 'header' | 'query' })}>
+              <option value="header">Header</option>
+              <option value="query">Query string</option>
+            </Select>
+          </Field>
+        </div>
+      )}
+      {authType === 'oauth2' && (
+        <div className="space-y-3">
+          <Field label="Grant type">
+            <Select value={auth.grant_type} onChange={(e) => setAuth({ grant_type: e.target.value as 'authorization_code' | 'client_credentials' })}>
+              <option value="authorization_code">Authorization code (sign in through a browser window)</option>
+              <option value="client_credentials">Client credentials (machine to machine)</option>
+            </Select>
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {auth.grant_type === 'authorization_code' && input('auth_url', 'Authorization URL', 'url', 'https://provider/authorize')}
+            {input('token_url', 'Token URL', 'url', 'https://provider/token')}
+            {input('client_id', 'Client ID')}
+            {input('client_secret', 'Client secret', 'password')}
+            {input('scope', 'Scope', 'text', 'read write')}
+          </div>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">{input('access_token', 'Access token', 'text', 'Filled in by “Get new access token”')}</div>
+            <Button onClick={oauth.getToken} disabled={oauth.busy || !auth.token_url || !auth.client_id}>{oauth.busy ? 'Waiting…' : 'Get new access token'}</Button>
+          </div>
+          {auth.grant_type === 'client_credentials' && <p className="text-[11px] text-slate-500">If the access token is empty, one is fetched automatically when you send.</p>}
+        </div>
+      )}
+      {authType === 'inherit' && (
+        <p className="text-xs text-slate-400">
+          Uses the selected environment’s <code>AUTH_TOKEN</code> (bearer), <code>AUTH_USERNAME</code>/<code>AUTH_PASSWORD</code> (basic) or <code>API_KEY</code> (header named by <code>API_KEY_HEADER</code>, default X-API-Key).
+        </p>
+      )}
+    </div>
+  )
+}
 
-      {authType === 'bearer' && (
-        <input
-          type="text"
-          value={authConfig.token}
-          onChange={(e) => onAuthConfigChange({ token: e.target.value })}
-          placeholder="Bearer token"
-          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
+function BodyEditor() {
+  const { method, body, bodyType, set } = usePlaygroundStore()
+  if (method === 'GET' || method === 'HEAD') return <p className="p-3 text-xs text-slate-500">{method} requests have no body.</p>
+  return (
+    <div className="flex h-full flex-col gap-2 p-3">
+      <div className="flex items-center gap-3 text-xs text-slate-400">
+        {(['none', 'json', 'form', 'raw'] as BodyType[]).map((t) => (
+          <label key={t} className="flex items-center gap-1">
+            <input type="radio" name="body-type" checked={bodyType === t} onChange={() => set({ bodyType: t })} className="accent-teal-500" />
+            {t === 'form' ? 'Form (url-encoded)' : t === 'json' ? 'JSON' : t === 'raw' ? 'Raw text' : 'None'}
+          </label>
+        ))}
+        {bodyType === 'json' && <Button size="sm" variant="ghost" className="ml-auto" onClick={() => set({ body: pretty(body) })}>Format</Button>}
+      </div>
+      {bodyType !== 'none' && (
+        <textarea
+          value={body}
+          onChange={(e) => set({ body: e.target.value })}
+          spellCheck={false}
+          aria-label="Request body"
+          placeholder={bodyType === 'json' ? '{\n  "name": "${USER_NAME}"\n}' : bodyType === 'form' ? 'username=alice&password=secret' : ''}
+          className="min-h-40 flex-1 resize-none rounded border border-slate-700 bg-slate-900 p-2 font-mono text-xs text-slate-200 outline-none focus:border-teal-500"
         />
       )}
+    </div>
+  )
+}
 
-      {authType === 'apikey' && (
-        <div className="space-y-2">
-          <input
-            type="text"
-            value={authConfig.apiKeyName}
-            onChange={(e) => onAuthConfigChange({ apiKeyName: e.target.value })}
-            placeholder="Key name (e.g. X-API-Key)"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-          />
-          <input
-            type="text"
-            value={authConfig.apiKeyValue}
-            onChange={(e) => onAuthConfigChange({ apiKeyValue: e.target.value })}
-            placeholder="Key value"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-          />
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500">Add to:</span>
-            <label className="flex items-center gap-1.5 text-xs text-slate-300">
-              <input
-                type="radio"
-                name="apiKeyIn"
-                checked={authConfig.apiKeyIn === 'header'}
-                onChange={() => onAuthConfigChange({ apiKeyIn: 'header' })}
-                className="accent-teal-500"
-              />
-              Header
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-300">
-              <input
-                type="radio"
-                name="apiKeyIn"
-                checked={authConfig.apiKeyIn === 'query'}
-                onChange={() => onAuthConfigChange({ apiKeyIn: 'query' })}
-                className="accent-teal-500"
-              />
-              Query Param
-            </label>
+function TimingView({ timing }: { timing: PlaygroundResponse['timing'] }) {
+  const total = timing.total_ms || 1
+  return (
+    <div className="p-4">
+      <p className="mb-3 text-xs text-slate-400">Total <span className="font-mono text-slate-200">{formatMs(timing.total_ms)}</span></p>
+      <div className="mb-4 flex h-5 overflow-hidden rounded bg-slate-800">
+        {TIMING_SEGMENTS.map(({ key, color, label }) => {
+          const pct = (timing[key] / total) * 100
+          return pct < 0.5 ? null : <div key={key} className={color} style={{ width: `${pct}%` }} title={`${label}: ${formatMs(timing[key])}`} />
+        })}
+      </div>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+        {TIMING_SEGMENTS.map(({ key, label, color }) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <span className={`h-2.5 w-2.5 rounded-sm ${color}`} />
+            <dt className="text-slate-400">{label}</dt>
+            <dd className="ml-auto font-mono text-slate-200">{formatMs(timing[key])}</dd>
           </div>
+        ))}
+      </dl>
+      <p className="mt-4 text-[11px] text-slate-500">DNS, connect and TLS are zero when the connection was reused.</p>
+    </div>
+  )
+}
+
+function ResponsePane() {
+  const { response, sending, error } = usePlaygroundStore()
+  const [tab, setTab] = useState<'body' | 'headers' | 'cookies' | 'timing'>('body')
+  const [raw, setRaw] = useState(false)
+
+  if (sending) return <div className="p-6"><Spinner label="Sending…" /></div>
+  if (error) return <div className="m-4 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300" role="alert">{error}</div>
+  if (!response) return <div className="p-6"><EmptyState title="No response yet">Enter a URL and press Send (Ctrl+Enter). Requests go out from the OpenSynapse server, so <code>localhost</code> means the server’s machine.</EmptyState></div>
+
+  const headers = Object.entries(response.headers).sort(([a], [b]) => a.localeCompare(b))
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-800 px-4 py-2 text-xs">
+        <span className={`font-mono text-sm font-semibold ${statusTone(response.status)}`}>{response.status} {response.status_text.replace(/^\d+\s*/, '')}</span>
+        <span className="text-slate-400">{formatMs(response.timing.total_ms)}</span>
+        <span className="text-slate-400">{formatBytes(response.body_size)}</span>
+        {response.final_url && <span className="truncate text-slate-500" title={response.final_url}>→ {response.final_url}</span>}
+        {response.truncated && <Badge tone="warn">Body truncated</Badge>}
+      </div>
+      <Tabs label="Response" value={tab} onChange={setTab} tabs={[['body', 'Body'], ['headers', `Headers (${headers.length})`], ['cookies', `Cookies (${response.cookies.length})`], ['timing', 'Timing']]} />
+      <div className="min-h-0 flex-1 overflow-auto">
+        {tab === 'body' && (
+          <div className="relative">
+            <button type="button" onClick={() => setRaw(!raw)} className="absolute right-3 top-2 text-[11px] text-slate-500 hover:text-slate-300">{raw ? 'Pretty' : 'Raw'}</button>
+            <pre className="whitespace-pre-wrap break-all p-4 font-mono text-xs text-slate-300">{(raw ? response.body : pretty(response.body)) || <span className="text-slate-500">(empty body)</span>}</pre>
+          </div>
+        )}
+        {tab === 'headers' && (
+          <table className="w-full text-xs">
+            <tbody>
+              {headers.map(([k, v]) => (
+                <tr key={k} className="border-b border-slate-800/60">
+                  <td className="w-1/3 px-4 py-1.5 align-top font-mono text-slate-400">{k}</td>
+                  <td className="break-all px-4 py-1.5 font-mono text-slate-200">{v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'cookies' &&
+          (response.cookies.length === 0 ? (
+            <p className="p-4 text-xs text-slate-500">The response set no cookies.</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="text-left text-slate-500">
+                <tr>{['Name', 'Value', 'Domain', 'Path', 'Expires', 'Flags'].map((h) => <th key={h} className="px-4 py-1.5 font-medium">{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {response.cookies.map((c) => (
+                  <tr key={c.name + c.path} className="border-t border-slate-800/60 font-mono text-slate-300">
+                    <td className="px-4 py-1.5">{c.name}</td>
+                    <td className="max-w-xs truncate px-4 py-1.5" title={c.value}>{c.value}</td>
+                    <td className="px-4 py-1.5">{c.domain || '—'}</td>
+                    <td className="px-4 py-1.5">{c.path || '/'}</td>
+                    <td className="px-4 py-1.5">{c.expires || 'Session'}</td>
+                    <td className="px-4 py-1.5">{[c.http_only && 'HttpOnly', c.secure && 'Secure'].filter(Boolean).join(' ') || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+        {tab === 'timing' && <TimingView timing={response.timing} />}
+      </div>
+    </div>
+  )
+}
+
+function MicroTestPanel({ onClose }: { onClose: () => void }) {
+  const { micro, microRunning, microTest } = usePlaygroundStore()
+  const { metric } = useChartTheme()
+  const [vusText, setVus] = useState('5')
+  const [secondsText, setSeconds] = useState('10')
+  const vus = clampInt(vusText, 1, 50, 5)
+  const seconds = clampInt(secondsText, 1, 60, 10)
+  const s = micro?.summary
+
+  return (
+    <div className="border-t border-slate-800 bg-slate-950/40">
+      <div className="flex flex-wrap items-end gap-3 px-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-slate-200">Micro-test</p>
+          <p className="text-[11px] text-slate-500">A short k6 burst of this one request (1–50 VUs, 1–60 s). It is not saved as a run.</p>
+        </div>
+        <div className="w-24"><Field label="VUs"><TextInput type="number" min={1} max={50} value={vusText} onChange={(e) => setVus(e.target.value)} /></Field></div>
+        <div className="w-28"><Field label="Seconds"><TextInput type="number" min={1} max={60} value={secondsText} onChange={(e) => setSeconds(e.target.value)} /></Field></div>
+        <Button variant="primary" disabled={microRunning} onClick={() => microTest(vus, seconds)}>{microRunning ? `Running for ${seconds}s…` : 'Start micro-test'}</Button>
+        <Button variant="ghost" className="ml-auto" onClick={onClose}>Close</Button>
+      </div>
+      {micro && (
+        <div className="space-y-3 px-4 pb-4">
+          {micro.message && <p className={`text-xs ${micro.status === 'completed' ? 'text-slate-400' : 'text-red-300'}`}>{micro.message}</p>}
+          {s && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+              {[
+                ['Requests', formatNumber(s.total_requests)],
+                ['RPS', s.throughput_rps.toFixed(1)],
+                ['p50', formatMs(s.p50_ms)],
+                ['p95', formatMs(s.p95_ms)],
+                ['p99', formatMs(s.p99_ms)],
+                ['Max', formatMs(s.max_ms)],
+                ['Errors', `${s.error_rate.toFixed(1)}%`],
+              ].map(([label, value]) => (
+                <Card key={label} className="px-3 py-2">
+                  <p className="text-[11px] text-slate-500">{label}</p>
+                  <p className="font-mono text-sm text-slate-100">{value}</p>
+                </Card>
+              ))}
+            </div>
+          )}
+          {micro.series.length > 1 && (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <MetricChart title="Requests per second" unit="req/s" height={150} points={micro.series} series={[{ key: 'rps', label: 'RPS', color: metric.rps, value: (p) => p.rps }]} />
+              <MetricChart
+                title="Response time"
+                unit="ms"
+                height={150}
+                points={micro.series}
+                series={[
+                  { key: 'p50', label: 'p50', color: metric.p50, value: (p) => p.p50_ms },
+                  { key: 'p95', label: 'p95', color: metric.p95, value: (p) => p.p95_ms },
+                ]}
+              />
+            </div>
+          )}
+          {micro.errors.length > 0 && (
+            <details className="text-xs text-slate-400">
+              <summary className="cursor-pointer">{micro.errors.length} error sample{micro.errors.length === 1 ? '' : 's'}</summary>
+              <ul className="mt-1 space-y-0.5 font-mono">
+                {micro.errors.slice(0, 20).map((e, i) => <li key={i}>{e.status || e.error_code} {e.message}</li>)}
+              </ul>
+            </details>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// --- Response body view ---
-
-function ResponseBodyView({
-  body,
-  prettyPrint,
-  onTogglePretty,
-}: {
-  body: string
-  prettyPrint: boolean
-  onTogglePretty: () => void
-}) {
-  const displayed = prettyPrint ? tryPrettyJson(body) : body
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-end border-b border-slate-800 px-4 py-1.5">
-        <button
-          onClick={onTogglePretty}
-          className={`rounded px-2 py-0.5 text-[10px] font-medium ${
-            prettyPrint
-              ? 'bg-teal-600/20 text-teal-400'
-              : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
-          }`}
-        >
-          Pretty
-        </button>
-      </div>
-      <pre className="flex-1 overflow-auto whitespace-pre-wrap break-all bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-300">
-        {displayed}
-      </pre>
-    </div>
-  )
+function toBase64(s: string) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(s)))
 }
 
-// --- Response headers view ---
+/** Converts the current request into an HTTP Request node for a plan. */
+function toHttpNode(name: string): { node: Node; warning?: string } {
+  const s = usePlaygroundStore.getState()
+  const headers = s.headers.filter((h) => h.enabled && h.key.trim()).map((h) => ({ key: h.key.trim(), value: h.value, enabled: true }))
+  let url = s.url.trim()
+  const params = s.params.filter((p) => p.enabled && p.key.trim())
+  if (params.length) url += (url.includes('?') ? '&' : '?') + params.map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&')
+  let warning: string | undefined
+  const a = s.auth
+  // Plans carry auth as headers; methods that need a handshake can't be expressed that way.
+  if (s.authType === 'basic') headers.push({ key: 'Authorization', value: `Basic ${toBase64(`${a.username}:${a.password}`)}`, enabled: true })
+  else if (s.authType === 'bearer') headers.push({ key: 'Authorization', value: `Bearer ${a.token}`, enabled: true })
+  else if (s.authType === 'api_key' && a.add_to === 'header') headers.push({ key: a.key, value: a.value, enabled: true })
+  else if (s.authType === 'api_key') url += `${url.includes('?') ? '&' : '?'}${encodeURIComponent(a.key)}=${encodeURIComponent(a.value)}`
+  else if (s.authType === 'oauth2') {
+    headers.push({ key: 'Authorization', value: 'Bearer ${AUTH_TOKEN}', enabled: true })
+    warning = 'OAuth tokens expire, so the node uses ${AUTH_TOKEN}: set it in the run’s environment.'
+  } else if (s.authType === 'inherit') {
+    headers.push({ key: 'Authorization', value: 'Bearer ${AUTH_TOKEN}', enabled: true })
+  } else if (s.authType === 'digest') warning = 'Digest auth is not carried into plans; add credentials to the node by hand.'
 
-function ResponseHeadersView({ headers }: { headers: Record<string, string> }) {
-  const entries = Object.entries(headers)
+  const hasBody = s.bodyType !== 'none' && s.method !== 'GET' && s.method !== 'HEAD'
+  let body: Record<string, unknown> = { type: 'none' }
+  if (hasBody && s.bodyType === 'form') body = { type: 'form', form_fields: [...new URLSearchParams(s.body)].map(([key, value]) => ({ key, value })) }
+  else if (hasBody) body = { type: s.bodyType, content: s.body }
 
-  return (
-    <div className="p-4">
-      {entries.length === 0 ? (
-        <p className="text-xs text-slate-600">No headers returned.</p>
-      ) : (
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-slate-800">
-              <th className="pb-2 pr-4 font-medium text-slate-500">Name</th>
-              <th className="pb-2 font-medium text-slate-500">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map(([name, value]) => (
-              <tr key={name} className="border-b border-slate-800/50">
-                <td className="py-1.5 pr-4 font-mono text-teal-400">{name}</td>
-                <td className="py-1.5 font-mono text-slate-300">{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
+  const node = createNode('http', name)
+  node.properties = { ...NODE_TYPES.http.defaultProperties, method: s.method, url, headers, body }
+  return { node, warning }
 }
 
-// --- Timing view ---
-
-function TimingView({ timing }: { timing: { dns_ms: number; connect_ms: number; tls_ms: number; send_ms: number; wait_ms: number; receive_ms: number; total_ms: number } }) {
-  const total = timing.total_ms || 1
-
-  return (
-    <div className="p-4">
-      <p className="mb-3 text-xs text-slate-500">
-        Total: <span className="font-mono text-slate-300">{timing.total_ms.toFixed(0)} ms</span>
-      </p>
-
-      {/* Stacked bar */}
-      <div className="mb-4 flex h-6 overflow-hidden rounded">
-        {TIMING_SEGMENTS.map(({ key, color }) => {
-          const val = timing[key as keyof typeof timing] as number
-          const pct = (val / total) * 100
-          if (pct < 0.5) return null
-          return (
-            <div
-              key={key}
-              className={`${color} flex items-center justify-center`}
-              style={{ width: `${pct}%` }}
-              title={`${key}: ${val.toFixed(0)} ms`}
-            >
-              {pct > 8 && (
-                <span className="text-[9px] font-bold text-white">
-                  {val.toFixed(0)}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {TIMING_SEGMENTS.map(({ key, label, color }) => {
-          const val = timing[key as keyof typeof timing] as number
-          return (
-            <div key={key} className="flex items-center gap-1.5">
-              <span className={`inline-block h-2.5 w-2.5 rounded-sm ${color}`} />
-              <span className="text-xs text-slate-400">
-                {label}: <span className="font-mono text-slate-300">{val.toFixed(0)} ms</span>
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
+function flatten(n: Node, depth = 0, out: { node: Node; depth: number }[] = []) {
+  if (NODE_TYPES[n.type]?.canHaveChildren) out.push({ node: n, depth })
+  n.children.forEach((c) => flatten(c, depth + 1, out))
+  return out
 }
 
-// --- Save to Plan modal ---
+function insertInto(root: Node, parentId: string, child: Node): Node {
+  if (root.id === parentId) return { ...root, children: [...root.children, child] }
+  return { ...root, children: root.children.map((c) => insertInto(c, parentId, child)) }
+}
+
+/** "GET /products/p1": a default name for a saved request. */
+function requestName() {
+  const { method, url } = usePlaygroundStore.getState()
+  return `${method} ${url.replace(/^(https?:\/\/[^/]+|\$\{\w+\})/, '') || '/'}`
+}
 
 function SaveToPlanModal({ onClose }: { onClose: () => void }) {
-  const store = usePlaygroundStore()
-  const [planId, setPlanId] = useState('')
-  const [parentNodeId, setParentNodeId] = useState('')
+  const toast = useToast()
+  const [plans, setPlans] = useState<{ id: string; name: string }[]>([])
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const [parentId, setParentId] = useState('')
+  const [name, setName] = useState(requestName)
   const [saving, setSaving] = useState(false)
 
-  const handleSave = async () => {
-    if (!planId.trim() || !parentNodeId.trim()) return
+  useEffect(() => {
+    unwrap(api.GET('/api/v1/plans', { params: { query: { limit: '500' } } })).then((r) => setPlans(r.items)).catch((e) => toast(errorMessage(e), 'error'))
+  }, [toast])
+
+  async function choosePlan(id: string) {
+    setPlan(null)
+    setParentId('')
+    if (!id) return
+    try {
+      const p = await unwrap(api.GET('/api/v1/plans/{id}', { params: { path: { id } } }))
+      setPlan(p)
+      setParentId((p.root.children.find((c) => c.type === 'scenario') ?? p.root).id)
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    }
+  }
+
+  async function save() {
+    if (!plan || !parentId) return
     setSaving(true)
     try {
-      await store.saveToPlan(planId.trim(), parentNodeId.trim())
+      const { node, warning } = toHttpNode(name.trim() || 'Request')
+      await unwrap(api.PUT('/api/v1/plans/{id}', { params: { path: { id: plan.id } }, body: { name: plan.name, description: plan.description, tags: plan.tags, root: insertInto(plan.root, parentId, node), default_environment_id: plan.default_environment_id } }))
+      toast(`Added to “${plan.name}”`, 'success')
+      if (warning) toast(warning, 'info')
       onClose()
-    } catch {
-      // Error handled by store
+    } catch (e) {
+      toast(errorMessage(e), 'error')
     } finally {
       setSaving(false)
     }
   }
 
+  const targets = useMemo(() => (plan ? flatten(plan.root) : []), [plan])
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80">
-      <div className="w-96 rounded-lg border border-slate-700 bg-slate-900 p-5">
-        <h2 className="mb-4 text-sm font-semibold text-slate-200">Save to Plan</h2>
-        <p className="mb-3 text-xs text-slate-500">
-          Add this request as an HTTP sampler node to an existing plan.
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Plan ID</label>
-            <input
-              type="text"
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              placeholder="Plan UUID"
-              className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">Parent Node ID</label>
-            <input
-              type="text"
-              value={parentNodeId}
-              onChange={(e) => setParentNodeId(e.target.value)}
-              placeholder="Parent node UUID"
-              className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-teal-500"
-            />
-          </div>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!planId.trim() || !parentNodeId.trim() || saving}
-            className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Add to Plan'}
-          </button>
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      title="Add request to a plan"
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!plan || !parentId || saving} onClick={save}>{saving ? 'Adding…' : 'Add to plan'}</Button></>}
+    >
+      <div className="space-y-3">
+        <Field label="Node name"><TextInput value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Plan">
+          <Select value={plan?.id ?? ''} onChange={(e) => choosePlan(e.target.value)}>
+            <option value="">Choose a plan…</option>
+            {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </Field>
+        {plan && (
+          <Field label="Add inside" hint="The request is appended as the last child of this node.">
+            <Select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+              {targets.map(({ node, depth }) => <option key={node.id} value={node.id}>{'  '.repeat(depth)}{node.name} ({NODE_TYPES[node.type]?.label ?? node.type})</option>)}
+            </Select>
+          </Field>
+        )}
       </div>
+    </Modal>
+  )
+}
+
+function SaveToCollectionModal({ onClose, collections }: { onClose: () => void; collections: Collection[] }) {
+  const toast = useToast()
+  const save = usePlaygroundStore((s) => s.saveToCollection)
+  const [collection, setCollection] = useState(collections[0]?.name || 'My requests')
+  const [name, setName] = useState(requestName)
+
+  async function submit() {
+    try {
+      await save(collection.trim(), name.trim())
+      toast(`Saved to “${collection}”`, 'success')
+      onClose()
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Save request" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!collection.trim() || !name.trim()} onClick={submit}>Save</Button></>}>
+      <div className="space-y-3">
+        <Field label="Request name"><TextInput value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
+        <Field label="Collection" hint="Pick an existing collection or type a new name.">
+          <TextInput list="collection-names" value={collection} onChange={(e) => setCollection(e.target.value)} />
+          <datalist id="collection-names">{collections.map((c) => <option key={c.id} value={c.name} />)}</datalist>
+        </Field>
+        <p className="text-[11px] text-slate-500">Credentials in the auth settings are saved with the request.</p>
+      </div>
+    </Modal>
+  )
+}
+
+function CollectionsSidebar() {
+  const { collections, load, removeFromCollection } = usePlaygroundStore()
+  const toast = useToast()
+  if (collections.length === 0) return <p className="p-3 text-xs text-slate-500">Saved requests appear here. Use Save to keep one.</p>
+  return (
+    <div className="space-y-3 p-2">
+      {collections.map((c) => (
+        <div key={c.id}>
+          <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{c.name}</p>
+          <ul>
+            {c.requests.map((r, i) => (
+              <li key={i} className="group flex items-center gap-1 rounded hover:bg-slate-800">
+                <button type="button" onClick={() => load(r)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left text-xs">
+                  <span className={`w-11 shrink-0 font-mono text-[10px] font-semibold ${METHOD_TONE[r.method] ?? 'text-slate-400'}`}>{r.method}</span>
+                  <span className="truncate text-slate-300" title={r.url}>{r.name.startsWith(`${r.method} `) ? r.name.slice(r.method.length + 1) : r.name}</span>
+                </button>
+                <button type="button" aria-label={`Delete ${r.name}`} onClick={() => removeFromCollection(c, i).catch((e) => toast(errorMessage(e), 'error'))} className="invisible px-1.5 text-xs text-slate-500 hover:text-red-400 group-hover:visible">✕</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** API Playground (F-03): send single requests, inspect responses, burst-test them. */
+export function PlaygroundPage() {
+  const store = usePlaygroundStore()
+  const { method, url, params, headers, environmentId, set, send, sending, loadCollections, collections } = store
+  const editable = canEdit(useAuthStore((s) => s.user))
+  const [tab, setTab] = useState<'params' | 'headers' | 'body' | 'auth'>('params')
+  const [envs, setEnvs] = useState<Environment[]>([])
+  const [showMicro, setShowMicro] = useState(false)
+  const [saveCollection, setSaveCollection] = useState(false)
+  const [savePlan, setSavePlan] = useState(false)
+
+  useEffect(() => {
+    loadCollections()
+    unwrap(api.GET('/api/v1/environments', { params: { query: { limit: '500' } } })).then((r) => setEnvs(r.items)).catch(() => {})
+  }, [loadCollections])
+
+  const activeParams = params.filter((p) => p.enabled && p.key).length
+  const activeHeaders = headers.filter((h) => h.enabled && h.key).length
+
+  return (
+    <div className="flex h-full">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 md:flex">
+        <div className="border-b border-slate-800 px-3 py-2 text-sm font-medium text-slate-200">Collections</div>
+        <div className="flex-1 overflow-y-auto"><CollectionsSidebar /></div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <form
+          className="flex flex-wrap items-center gap-2 border-b border-slate-800 p-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            send()
+          }}
+        >
+          <div className="w-28">
+            <Select value={method} onChange={(e) => set({ method: e.target.value as HttpMethod })} aria-label="Method" className={`font-mono font-semibold ${METHOD_TONE[method] ?? ''}`}>
+              {METHODS.map((m) => <option key={m}>{m}</option>)}
+            </Select>
+          </div>
+          <input
+            value={url}
+            onChange={(e) => set({ url: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send()
+            }}
+            placeholder="https://api.example.com/items or ${BASE_URL}/items"
+            aria-label="URL"
+            className="min-w-64 flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-teal-500"
+          />
+          <div className="w-44">
+            <Select value={environmentId} onChange={(e) => set({ environmentId: e.target.value })} aria-label="Environment">
+              <option value="">No environment</option>
+              {envs.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </Select>
+          </div>
+          <Button type="submit" variant="primary" disabled={sending}>{sending ? 'Sending…' : 'Send'}</Button>
+          <Button type="button" onClick={() => setShowMicro((v) => !v)} aria-pressed={showMicro} disabled={!url.trim()}>Micro-test</Button>
+          <Button type="button" onClick={() => setSaveCollection(true)} disabled={!url.trim()}>Save</Button>
+          {editable && <Button type="button" onClick={() => setSavePlan(true)} disabled={!url.trim()}>Add to plan</Button>}
+        </form>
+        {environmentId && <p className="border-b border-slate-800 px-3 py-1 text-[11px] text-slate-500">${'{'}VARIABLES{'}'} in the URL, headers, body and auth are filled from the selected environment.</p>}
+
+        <div className="grid min-h-0 flex-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1">
+          <section className="flex min-h-0 flex-col border-b border-slate-800 lg:border-b-0 lg:border-r" aria-label="Request">
+            <Tabs label="Request" value={tab} onChange={setTab} tabs={[['params', `Params${activeParams ? ` (${activeParams})` : ''}`], ['headers', `Headers${activeHeaders ? ` (${activeHeaders})` : ''}`], ['body', 'Body'], ['auth', `Auth${store.authType !== 'none' ? ' •' : ''}`]]} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {tab === 'params' && <KeyValueEditor rows={params} onChange={(rows) => set({ params: rows })} keyPlaceholder="Query parameter" />}
+              {tab === 'headers' && <KeyValueEditor rows={headers} onChange={(rows) => set({ headers: rows })} keyPlaceholder="Header" />}
+              {tab === 'body' && <BodyEditor />}
+              {tab === 'auth' && <AuthEditor />}
+            </div>
+          </section>
+          <section className="min-h-0" aria-label="Response">
+            <ResponsePane />
+          </section>
+        </div>
+
+        {showMicro && <MicroTestPanel onClose={() => setShowMicro(false)} />}
+      </div>
+
+      {saveCollection && <SaveToCollectionModal onClose={() => setSaveCollection(false)} collections={collections} />}
+      {savePlan && <SaveToPlanModal onClose={() => setSavePlan(false)} />}
     </div>
   )
 }

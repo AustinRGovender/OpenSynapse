@@ -6,7 +6,10 @@ metadata:
     {{- include "opensynapse.labels" . | nindent 4 }}
     app.kubernetes.io/component: control-plane
 spec:
-  replicas: {{ .Values.replicaCount }}
+  # One replica: live runs are tracked in this process's memory.
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "opensynapse.controlPlane.selectorLabels" . | nindent 6 }}
@@ -14,11 +17,22 @@ spec:
     metadata:
       labels:
         {{- include "opensynapse.controlPlane.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-control-plane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
       containers:
         - name: control-plane
           image: "{{ .Values.controlPlane.image.repository }}:{{ .Values.controlPlane.image.tag }}"
           imagePullPolicy: {{ .Values.controlPlane.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: {{ .Values.controlPlane.port }}
@@ -27,36 +41,66 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-control-plane
           env:
-            - name: OPENSYNAPSE_MODE
-              value: "cluster"
-            - name: DB_DSN
-              value: {{ include "opensynapse.postgres.dsn" . | quote }}
+            {{- if .Values.postgres.enabled }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-postgres
+                  name: {{ .Release.Name }}-app
                   key: postgres-password
+            # The generated password is alphanumeric, so it needs no URL escaping.
+            - name: DB_DSN
+              value: "postgres://{{ .Values.postgres.username }}:$(POSTGRES_PASSWORD)@{{ .Release.Name }}-postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?sslmode=disable"
+            {{- else }}
+            - name: DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-app
+                  key: db-dsn
+            {{- end }}
+            - name: OPENSYNAPSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-app
+                  key: secret-key
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-minio
-                  key: access-key
+                  name: {{ .Release.Name }}-app
+                  key: s3-access-key
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Release.Name }}-minio
-                  key: secret-key
+                  name: {{ .Release.Name }}-app
+                  key: s3-secret-key
+            {{- if .Values.controlPlane.adminPassword }}
+            - name: OPENSYNAPSE_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-app
+                  key: admin-password
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 40
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: 3
             periodSeconds: 5
           resources:
             {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+      volumes:
+        # Scratch space only: data is in Postgres and object storage.
+        - name: data
+          emptyDir: {}

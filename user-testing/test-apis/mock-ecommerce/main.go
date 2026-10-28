@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"sync"
@@ -8,6 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+//go:embed openapi.yaml
+var openAPISpec []byte
 
 type Product struct {
 	ID    string  `json:"id"`
@@ -23,10 +27,15 @@ type Order struct {
 	Status     string   `json:"status"`
 }
 
+// maxOrders bounds the in-memory order store so long soak tests don't grow
+// memory without limit; the oldest orders are evicted first.
+const maxOrders = 10000
+
 var (
-	products = make(map[string]Product)
-	orders   = make(map[string]Order)
-	mu       sync.RWMutex
+	products   = make(map[string]Product)
+	orders     = make(map[string]Order)
+	orderQueue []string
+	mu         sync.RWMutex
 )
 
 func init() {
@@ -42,8 +51,43 @@ func init() {
 	}
 }
 
+// placeOrder records an order for the given products (used by the API and the shop).
+func placeOrder(productIDs []string) Order {
+	mu.Lock()
+	defer mu.Unlock()
+
+	total := 0.0
+	for _, pid := range productIDs {
+		if p, ok := products[pid]; ok {
+			total += p.Price
+		}
+	}
+
+	order := Order{
+		ID:         uuid.New().String(),
+		ProductIDs: productIDs,
+		Total:      total,
+		Status:     "pending",
+	}
+	orders[order.ID] = order
+	orderQueue = append(orderQueue, order.ID)
+	if len(orderQueue) > maxOrders {
+		delete(orders, orderQueue[0])
+		orderQueue = orderQueue[1:]
+	}
+	return order
+}
+
 func main() {
 	router := gin.Default()
+
+	// The API description, for OpenSynapse's OpenAPI import.
+	router.GET("/openapi.yaml", func(c *gin.Context) {
+		c.Data(200, "application/yaml", openAPISpec)
+	})
+
+	// An HTML storefront for crawler testing (shop.go).
+	registerShop(router)
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy", "service": "Mock E-commerce API"})
@@ -81,25 +125,19 @@ func main() {
 			return
 		}
 
-		mu.Lock()
-		defer mu.Unlock()
+		c.JSON(201, placeOrder(req.ProductIDs))
+	})
 
-		total := 0.0
-		for _, pid := range req.ProductIDs {
-			if p, ok := products[pid]; ok {
-				total += p.Price
-			}
+	// The most recently placed order. Registered before /orders/:id; gin
+	// resolves the static segment ahead of the parameter.
+	router.GET("/orders/latest", func(c *gin.Context) {
+		mu.RLock()
+		defer mu.RUnlock()
+		if len(orderQueue) == 0 {
+			c.JSON(404, gin.H{"error": "No orders yet"})
+			return
 		}
-
-		order := Order{
-			ID:         uuid.New().String(),
-			ProductIDs: req.ProductIDs,
-			Total:      total,
-			Status:     "pending",
-		}
-		orders[order.ID] = order
-
-		c.JSON(201, order)
+		c.JSON(200, orders[orderQueue[len(orderQueue)-1]])
 	})
 
 	router.GET("/orders/:id", func(c *gin.Context) {

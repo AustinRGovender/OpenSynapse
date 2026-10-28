@@ -55,7 +55,55 @@ export const colors = {
     7: '#84cc16',
     8: '#06b6d4',
   },
+
+  // High-contrast chart palette (Settings › Appearance), based on the
+  // Okabe–Ito colour-blind safe set.
+  chartHighContrast: {
+    1: '#0072b2',
+    2: '#e69f00',
+    3: '#009e73',
+    4: '#cc79a7',
+    5: '#d55e00',
+    6: '#56b4e9',
+    7: '#f0e442',
+    // Okabe–Ito's black, lightened so it shows on dark backgrounds too.
+    8: '#999999',
+  },
+
+  // Chart grid and axis strokes, per theme.
+  chartChrome: {
+    dark: { grid: '#1e293b', axis: '#64748b', tooltipBg: '#0f172a', tooltipBorder: '#334155' },
+    light: { grid: '#e2e8f0', axis: '#64748b', tooltipBg: '#ffffff', tooltipBorder: '#cbd5e1' },
+  },
 } as const
+
+export type ChartPaletteName = 'default' | 'high-contrast'
+
+/** Series colours for a palette, in order. */
+export function chartPalette(name: ChartPaletteName = 'default'): string[] {
+  const p = name === 'high-contrast' ? colors.chartHighContrast : colors.chart
+  return [p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]]
+}
+
+/**
+ * Colours for the run dashboard's metrics. Errors always use the semantic
+ * error colour so a red line means "failures" in every palette.
+ */
+export function metricColors(name: ChartPaletteName = 'default') {
+  const p = chartPalette(name)
+  return {
+    rps: p[0],
+    p50: p[7],
+    p90: p[1],
+    p95: p[2],
+    p99: p[4],
+    vus: p[5],
+    sent: p[1],
+    received: p[0],
+    error: colors.error,
+    marker: colors.warning,
+  }
+}
 
 export const typography = {
   fontFamily: {

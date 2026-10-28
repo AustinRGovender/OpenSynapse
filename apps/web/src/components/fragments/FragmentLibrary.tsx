@@ -1,379 +1,160 @@
-import { useState } from 'react'
-import { usePlanStore, findNode } from '../../stores/plan-store'
-import type { Node } from '@opensynapse/api-client'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Fragment, Node } from '@opensynapse/api-client'
+import { api, errorMessage, unwrap } from '../../api'
+import { NODE_TYPES } from '../../config/nodes'
+import { canEdit, useAuthStore } from '../../stores/auth-store'
+import { findNode, usePlanStore } from '../../stores/plan-store'
+import { useToast } from '../../stores/ui-store'
+import { Badge, Button, Field, Modal, TextInput } from '../ui/primitives'
 
-interface FragmentLibraryProps {
-  onClose: () => void
+function cloneWithNewIds(node: Node): Node {
+  return { ...node, id: crypto.randomUUID(), children: node.children.map(cloneWithNewIds) }
 }
 
-interface FragmentDef {
-  name: string
-  description: string
-  tags: string[]
-  nodeTypes: string[]
-}
-
-const SHIPPED_FRAGMENTS: FragmentDef[] = [
-  {
-    name: 'Generic Form Login',
-    description: 'POST username/password to a login endpoint and extract session cookie',
-    tags: ['auth', 'form'],
-    nodeTypes: ['http', 'assertion'],
-  },
-  {
-    name: 'CSRF Token Extraction',
-    description: 'GET a page, extract the CSRF token via regex, and pass it to subsequent requests',
-    tags: ['auth', 'csrf'],
-    nodeTypes: ['http', 'code-block'],
-  },
-  {
-    name: 'Pagination Walker',
-    description: 'Loop through paginated API responses until no more pages remain',
-    tags: ['api', 'pagination'],
-    nodeTypes: ['loop-controller', 'http', 'code-block'],
-  },
-  {
-    name: 'Search-then-Select',
-    description: 'Search for items then pick one at random from the results',
-    tags: ['api', 'workflow'],
-    nodeTypes: ['http', 'code-block'],
-  },
-  {
-    name: 'Cart Checkout',
-    description: 'Add items to cart, view cart, apply coupon, and complete checkout',
-    tags: ['e-commerce', 'workflow'],
-    nodeTypes: ['transaction-controller', 'http'],
-  },
-  {
-    name: 'File Upload (multipart)',
-    description: 'Upload a file using multipart/form-data encoding',
-    tags: ['upload', 'file'],
-    nodeTypes: ['http'],
-  },
-  {
-    name: 'File Download with Hash',
-    description: 'Download a file and verify its integrity via content hash',
-    tags: ['download', 'file', 'verification'],
-    nodeTypes: ['http', 'code-block', 'assertion'],
-  },
-  {
-    name: 'OAuth Authorization Code',
-    description: 'Simulate the OAuth 2.0 authorization code flow with token exchange',
-    tags: ['auth', 'oauth'],
-    nodeTypes: ['http', 'code-block'],
-  },
-  {
-    name: 'SAML Login Stub',
-    description: 'Stub a SAML-based SSO login flow for load testing',
-    tags: ['auth', 'saml', 'sso'],
-    nodeTypes: ['http', 'code-block'],
-  },
-  {
-    name: 'Wait-for-Condition Polling',
-    description: 'Poll an endpoint until a condition is met or timeout is reached',
-    tags: ['polling', 'async'],
-    nodeTypes: ['loop-controller', 'http', 'code-block', 'timer'],
-  },
-]
-
-interface SavedFragment {
-  id: string
-  name: string
-  tags: string[]
-  nodeTypes: string[]
-  root: Node
-  createdAt: string
-}
-
-function getStoredFragments(): SavedFragment[] {
-  try {
-    const raw = localStorage.getItem('opensynapse_fragments')
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // ignore parse errors
+/** Replaces ${NAME} for each bound variable throughout a subtree. */
+function bind(node: Node, values: Record<string, string>): Node {
+  let json = JSON.stringify(node)
+  for (const [name, value] of Object.entries(values)) {
+    if (value === '') continue
+    // JSON.stringify(value).slice(1, -1) escapes quotes and backslashes for the JSON text.
+    json = json.split('${' + name + '}').join(JSON.stringify(value).slice(1, -1))
   }
-  return []
+  return JSON.parse(json)
 }
 
-function saveFragmentToStorage(fragment: SavedFragment) {
-  const existing = getStoredFragments()
-  existing.push(fragment)
-  localStorage.setItem('opensynapse_fragments', JSON.stringify(existing))
+function nodeTypes(n: Node, acc = new Set<string>()): Set<string> {
+  acc.add(n.type)
+  n.children.forEach((c) => nodeTypes(c, acc))
+  return acc
 }
 
-function removeFragmentFromStorage(id: string) {
-  const existing = getStoredFragments().filter((f) => f.id !== id)
-  localStorage.setItem('opensynapse_fragments', JSON.stringify(existing))
-}
+/** Fragments sidebar (F-10): reusable subtrees with variable bindings. */
+export function FragmentLibrary({ onClose }: { onClose: () => void }) {
+  const toast = useToast()
+  const editable = canEdit(useAuthStore((s) => s.user))
+  const plan = usePlanStore((s) => s.plan)
+  const selectedNodeId = usePlanStore((s) => s.selectedNodeId)
+  const addChild = usePlanStore((s) => s.addChild)
+  const [fragments, setFragments] = useState<Fragment[]>([])
+  const [query, setQuery] = useState('')
+  const [inserting, setInserting] = useState<Fragment | null>(null)
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [saveName, setSaveName] = useState('')
 
-function collectNodeTypes(node: Node): string[] {
-  const types = new Set<string>()
-  function walk(n: Node) {
-    if (n.type !== 'plan') types.add(n.type)
-    n.children.forEach(walk)
-  }
-  walk(node)
-  return Array.from(types)
-}
+  const load = useCallback(() => unwrap(api.GET('/api/v1/fragments')).then((r) => setFragments(r.items)).catch((e) => toast(errorMessage(e), 'error')), [toast])
+  useEffect(() => {
+    load()
+  }, [load])
 
-function buildFragmentNodes(fragmentName: string): Node {
-  // Shipped fragments produce placeholder subtrees
-  const id = () => crypto.randomUUID()
-  switch (fragmentName) {
-    case 'Generic Form Login':
-      return {
-        id: id(), type: 'transaction-controller', name: 'Login', enabled: true,
-        properties: {},
-        children: [
-          {
-            id: id(), type: 'http', name: 'POST /login', enabled: true,
-            properties: { method: 'POST', url: '${BASE_URL}/login', headers: [], body: { type: 'form', content: 'username=${USERNAME}&password=${PASSWORD}' }, follow_redirects: true },
-            children: [],
-          },
-          {
-            id: id(), type: 'assertion', name: 'Check status 200', enabled: true,
-            properties: { target: 'status', condition: 'equals', value: 200, negate: false },
-            children: [],
-          },
-        ],
-      }
-    case 'CSRF Token Extraction':
-      return {
-        id: id(), type: 'transaction-controller', name: 'CSRF Token Extraction', enabled: true,
-        properties: {},
-        children: [
-          {
-            id: id(), type: 'http', name: 'GET page with token', enabled: true,
-            properties: { method: 'GET', url: '${BASE_URL}/form', headers: [], body: { type: 'none' }, follow_redirects: true },
-            children: [],
-          },
-          {
-            id: id(), type: 'code-block', name: 'Extract CSRF token', enabled: true,
-            properties: { code: '// Extract CSRF token from response body\nconst match = response.body.match(/name="csrf_token" value="([^"]+)"/);\nif (match) vars.csrf_token = match[1];' },
-            children: [],
-          },
-        ],
-      }
-    default:
-      return {
-        id: id(), type: 'transaction-controller', name: fragmentName, enabled: true,
-        properties: {},
-        children: [
-          {
-            id: id(), type: 'code-block', name: `${fragmentName} placeholder`, enabled: true,
-            properties: { code: `// TODO: implement ${fragmentName}` },
-            children: [],
-          },
-        ],
-      }
-  }
-}
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase()
+    return fragments.filter((f) => !q || f.name.toLowerCase().includes(q) || f.tags.some((t) => t.includes(q)))
+  }, [fragments, query])
 
-function FragmentCard({
-  name,
-  description,
-  tags,
-  nodeTypes,
-  onInsert,
-  onDelete,
-}: {
-  name: string
-  description?: string
-  tags: string[]
-  nodeTypes: string[]
-  onInsert: () => void
-  onDelete?: () => void
-}) {
-  return (
-    <div className="group rounded-lg border border-slate-800 bg-slate-900 p-3 transition-colors hover:border-slate-700">
-      <div className="flex items-start justify-between gap-2">
-        <h4 className="text-xs font-semibold text-slate-200">{name}</h4>
-        <div className="flex flex-shrink-0 gap-1">
-          {onDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete() }}
-              className="hidden rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-red-400 group-hover:block"
-              title="Delete fragment"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M10.5 3.5L3.5 10.5M3.5 3.5l7 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
-      {description && (
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">{description}</p>
-      )}
-      <div className="mt-2 flex flex-wrap gap-1">
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-400"
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {nodeTypes.map((nt) => (
-          <span
-            key={nt}
-            className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-teal-400"
-          >
-            {nt}
-          </span>
-        ))}
-      </div>
-      <button
-        onClick={onInsert}
-        className="mt-2 w-full rounded bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
-      >
-        Insert
-      </button>
-    </div>
-  )
-}
-
-export function FragmentLibrary({ onClose }: FragmentLibraryProps) {
-  const { plan, selectedNodeId, addChild } = usePlanStore()
-  const [userFragments, setUserFragments] = useState<SavedFragment[]>(getStoredFragments)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
-  function getInsertTarget(): string | null {
+  // Insert under the selected node if it can have children, else under the first scenario.
+  function target(): Node | null {
     if (!plan) return null
-    if (selectedNodeId) return selectedNodeId
-    return plan.root.id
+    const sel = selectedNodeId ? findNode(plan.root, selectedNodeId) : null
+    if (sel && NODE_TYPES[sel.type]?.canHaveChildren && sel.type !== 'plan') return sel
+    return plan.root.children.find((c) => c.type === 'scenario') ?? plan.root
   }
 
-  function handleInsertShipped(fragment: FragmentDef) {
-    const targetId = getInsertTarget()
-    if (!targetId) return
-    const nodes = buildFragmentNodes(fragment.name)
-    addChild(targetId, nodes)
+  function startInsert(f: Fragment) {
+    if (!f.bindings?.length) return insert(f, {})
+    setValues(Object.fromEntries(f.bindings.map((b) => [b.name, b.default_value ?? ''])))
+    setInserting(f)
   }
 
-  function handleInsertSaved(fragment: SavedFragment) {
-    const targetId = getInsertTarget()
-    if (!targetId) return
-    // Deep clone with new IDs
-    function cloneWithNewIds(node: Node): Node {
-      return {
-        ...node,
-        id: crypto.randomUUID(),
-        properties: JSON.parse(JSON.stringify(node.properties)),
-        children: node.children.map(cloneWithNewIds),
-      }
-    }
-    addChild(targetId, cloneWithNewIds(fragment.root))
+  function insert(f: Fragment, vals: Record<string, string>) {
+    const t = target()
+    if (!t) return
+    addChild(t.id, cloneWithNewIds(bind(f.node_subtree, vals)))
+    setInserting(null)
+    toast(`Inserted “${f.name}” into ${t.name}`, 'success')
   }
 
-  function handleSaveAsFragment() {
-    if (!plan || !selectedNodeId) {
-      setSaveError('Select a node to save as a fragment')
-      setTimeout(() => setSaveError(null), 3000)
-      return
+  async function saveSelected() {
+    const sel = plan && selectedNodeId ? findNode(plan.root, selectedNodeId) : null
+    if (!sel || !saveName.trim()) return
+    // Variables used in the subtree become bindings the next user fills in.
+    const names = [...new Set([...JSON.stringify(sel).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]))]
+    try {
+      await unwrap(api.POST('/api/v1/fragments', { body: { name: saveName.trim(), node_subtree: sel, bindings: names.map((n) => ({ name: n, description: '', required: false })), tags: ['user'] } }))
+      toast(`Saved fragment “${saveName}”`, 'success')
+      setSaving(false)
+      setSaveName('')
+      load()
+    } catch (e) {
+      toast(errorMessage(e), 'error')
     }
-    const node = findNode(plan.root, selectedNodeId)
-    if (!node) return
-    if (node.type === 'plan') {
-      setSaveError('Cannot save the root plan node as a fragment')
-      setTimeout(() => setSaveError(null), 3000)
-      return
-    }
-    const fragment: SavedFragment = {
-      id: crypto.randomUUID(),
-      name: node.name,
-      tags: ['custom'],
-      nodeTypes: collectNodeTypes(node),
-      root: JSON.parse(JSON.stringify(node)),
-      createdAt: new Date().toISOString(),
-    }
-    saveFragmentToStorage(fragment)
-    setUserFragments(getStoredFragments())
   }
 
-  function handleDeleteFragment(id: string) {
-    removeFragmentFromStorage(id)
-    setUserFragments(getStoredFragments())
+  async function remove(f: Fragment) {
+    try {
+      await unwrap(api.DELETE('/api/v1/fragments/{id}', { params: { path: { id: f.id } } }))
+      load()
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+    }
   }
+
+  const selected = plan && selectedNodeId ? findNode(plan.root, selectedNodeId) : null
+  const missingRequired = inserting?.bindings?.some((b) => b.required && !values[b.name])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Header */}
+    <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Fragments
-        </span>
-        <button
-          onClick={onClose}
-          className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M10.5 3.5L3.5 10.5M3.5 3.5l7 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-        </button>
+        <span className="text-sm font-medium text-slate-200">Fragments</span>
+        <button type="button" onClick={onClose} aria-label="Close fragments" className="text-slate-500 hover:text-slate-300">✕</button>
       </div>
-
-      {/* Save as fragment button */}
-      <div className="border-b border-slate-800 px-3 py-2">
-        <button
-          onClick={handleSaveAsFragment}
-          className="w-full rounded-md border border-dashed border-slate-700 bg-slate-900/50 px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-300"
-        >
-          Save selection as Fragment
-        </button>
-        {saveError && (
-          <p className="mt-1 text-[10px] text-red-400">{saveError}</p>
+      <div className="space-y-2 border-b border-slate-800 p-2">
+        <TextInput value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search fragments" aria-label="Search fragments" />
+        {editable && selected && selected.type !== 'plan' && (
+          <Button size="sm" className="w-full" onClick={() => setSaving(true)}>Save “{selected.name}” as fragment</Button>
         )}
       </div>
-
-      {/* Scrollable list */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        {/* Shipped section */}
-        <div className="mb-4">
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-            Shipped
-          </h3>
-          <div className="space-y-2">
-            {SHIPPED_FRAGMENTS.map((f) => (
-              <FragmentCard
-                key={f.name}
-                name={f.name}
-                description={f.description}
-                tags={f.tags}
-                nodeTypes={f.nodeTypes}
-                onInsert={() => handleInsertShipped(f)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* My Fragments section */}
-        <div>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-            My Fragments
-          </h3>
-          {userFragments.length === 0 ? (
-            <p className="text-xs text-slate-600">
-              No saved fragments yet. Select a node and click "Save selection as Fragment" above.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {userFragments.map((f) => (
-                <FragmentCard
-                  key={f.id}
-                  name={f.name}
-                  tags={f.tags}
-                  nodeTypes={f.nodeTypes}
-                  onInsert={() => handleInsertSaved(f)}
-                  onDelete={() => handleDeleteFragment(f.id)}
-                />
-              ))}
+      <ul className="flex-1 space-y-1.5 overflow-y-auto p-2">
+        {filtered.map((f) => (
+          <li key={f.id} className="rounded-md border border-slate-800 bg-slate-900 p-2">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-xs font-medium text-slate-200">{f.name}</span>
+              {f.built_in && <Badge tone="accent">Built-in</Badge>}
             </div>
-          )}
+            {f.description && <p className="mt-0.5 text-[11px] text-slate-400">{f.description}</p>}
+            <p className="mt-1 font-mono text-[10px] text-slate-500">{[...nodeTypes(f.node_subtree)].map((t) => NODE_TYPES[t]?.icon ?? t).join(' ')}</p>
+            {editable && (
+              <div className="mt-1.5 flex gap-1">
+                <Button size="sm" variant="primary" onClick={() => startInsert(f)}>Insert</Button>
+                {!f.built_in && <Button size="sm" variant="ghost" onClick={() => remove(f)}>Delete</Button>}
+              </div>
+            )}
+          </li>
+        ))}
+        {filtered.length === 0 && <li className="p-2 text-xs text-slate-500">No fragments match.</li>}
+      </ul>
+
+      <Modal
+        open={inserting !== null}
+        onClose={() => setInserting(null)}
+        title={`Insert ${inserting?.name ?? ''}`}
+        footer={<><Button onClick={() => setInserting(null)}>Cancel</Button><Button variant="primary" disabled={missingRequired} onClick={() => inserting && insert(inserting, values)}>Insert</Button></>}
+      >
+        <p className="mb-3 text-xs text-slate-400">Fill in the fragment’s variables. Leave one empty to keep it as <code>{'${NAME}'}</code> and supply it from an environment instead.</p>
+        <div className="space-y-3">
+          {inserting?.bindings?.map((b) => (
+            <Field key={b.name} label={`${b.name}${b.required ? ' *' : ''}`} hint={b.description}>
+              <TextInput value={values[b.name] ?? ''} onChange={(e) => setValues({ ...values, [b.name]: e.target.value })} />
+            </Field>
+          ))}
         </div>
-      </div>
+      </Modal>
+
+      <Modal open={saving} onClose={() => setSaving(false)} title="Save as fragment" footer={<><Button onClick={() => setSaving(false)}>Cancel</Button><Button variant="primary" disabled={!saveName.trim()} onClick={saveSelected}>Save</Button></>}>
+        <Field label="Fragment name" hint="${VARIABLES} used inside become bindings filled in when the fragment is inserted.">
+          <TextInput value={saveName} onChange={(e) => setSaveName(e.target.value)} autoFocus />
+        </Field>
+      </Modal>
     </div>
   )
 }

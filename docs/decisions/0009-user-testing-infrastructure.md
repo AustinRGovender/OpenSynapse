@@ -38,7 +38,9 @@ Add a `built_in` column to the `plans` table (migration 0010) and seed 6 plans o
 5. **Cross-API — Spike Test** (ramping-vus spike, 5→100→5 VUs)
 6. **Echo API — Delay Validation** (constant-vus, 5 VUs, 1m)
 
-Built-in plans cannot be modified or deleted (403 response). This follows the same pattern established for built-in fragments (ADR implicit in fragments implementation).
+Built-in plans cannot be deleted (403 response), so they are always available as starting points.
+
+**Amended 2026-10-27:** built-in plans were originally read-only as well. They are now editable in place (each save bumps the version like any other plan) because users reach for the seed plans first and expect to tweak VUs, URLs, and assertions without cloning. Deletion remains blocked. Because seeding is skipped once any built-in plan exists, edits persist across restarts; previous versions remain available in the plan's version history.
 
 Seeding is idempotent: if any built-in plans exist, seeding is skipped.
 

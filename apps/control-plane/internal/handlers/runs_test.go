@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/testutil"
 )
 
@@ -118,12 +119,7 @@ func TestRunEventsEmpty(t *testing.T) {
 
 	// Create a run record directly
 	run, err := ts.Runs.Create(plan["id"].(string), 1, json.RawMessage(planBody), nil,
-		struct {
-			VUsTarget       int `json:"vus_target"`
-			RPSTarget       int `json:"rps_target,omitempty"`
-			DurationSeconds int `json:"duration_seconds"`
-			WorkerCount     int `json:"worker_count"`
-		}{VUsTarget: 10, DurationSeconds: 30, WorkerCount: 1})
+		db.RunParameters{VUsTarget: 10, DurationSeconds: 30, WorkerCount: 1})
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

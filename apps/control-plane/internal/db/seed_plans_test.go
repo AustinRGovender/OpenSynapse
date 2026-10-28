@@ -71,7 +71,7 @@ func TestBuiltInPlanCannotBeDeleted(t *testing.T) {
 	}
 }
 
-func TestBuiltInPlanCannotBeUpdated(t *testing.T) {
+func TestBuiltInPlanCanBeUpdated(t *testing.T) {
 	database, err := db.OpenMemory()
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -81,17 +81,20 @@ func TestBuiltInPlanCannotBeUpdated(t *testing.T) {
 	store := db.NewPlanStore(database)
 	store.SeedBuiltInPlans()
 
-	result, _ := store.List(db.ListParams{Limit: 1})
+	result, _ := store.List(db.ListParams{Limit: 100})
 	if len(result.Items) == 0 {
 		t.Fatal("no plans found")
 	}
 
 	p := result.Items[0]
-	_, err = store.Update(p.ID, "Hacked", p.Description, p.Tags, p.Root, nil)
-	if err == nil {
-		t.Fatal("expected error updating built-in plan")
+	updated, err := store.Update(p.ID, "Custom Name", p.Description, p.Tags, p.Root, nil)
+	if err != nil {
+		t.Fatalf("expected update to succeed, got: %v", err)
 	}
-	if err.Error() != "cannot modify built-in plan" {
-		t.Fatalf("unexpected error: %v", err)
+	if updated.Name != "Custom Name" {
+		t.Fatalf("expected name 'Custom Name', got %q", updated.Name)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("expected version 2, got %d", updated.Version)
 	}
 }

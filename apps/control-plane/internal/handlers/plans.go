@@ -10,6 +10,8 @@ import (
 
 type PlanHandlers struct {
 	store *db.PlanStore
+	// Settings, if set, supplies the default environment for new plans.
+	Settings *db.SettingsStore
 }
 
 func NewPlanHandlers(store *db.PlanStore) *PlanHandlers {
@@ -18,8 +20,8 @@ func NewPlanHandlers(store *db.PlanStore) *PlanHandlers {
 
 type createPlanRequest struct {
 	Name                 string   `json:"name"`
-	Description          string   `json:"description"`
-	Tags                 []string `json:"tags"`
+	Description          string   `json:"description,omitempty"`
+	Tags                 []string `json:"tags,omitempty"`
 	DefaultEnvironmentID *string  `json:"default_environment_id"`
 	Root                 db.Node  `json:"root"`
 }
@@ -57,6 +59,11 @@ func (h *PlanHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.DefaultEnvironmentID == nil && h.Settings != nil {
+		if st, err := h.Settings.Get(); err == nil && st.General.DefaultEnvironmentID != "" {
+			req.DefaultEnvironmentID = &st.General.DefaultEnvironmentID
+		}
+	}
 	plan, err := h.store.Create(req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID, false)
 	if err != nil {
 		internalError(w, err)
@@ -98,11 +105,7 @@ func (h *PlanHandlers) Update(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.store.Update(id, req.Name, req.Description, req.Tags, req.Root, req.DefaultEnvironmentID)
 	if err != nil {
-		if err.Error() == "cannot modify built-in plan" {
-			writeError(w, http.StatusForbidden, "CANNOT_MODIFY_BUILTIN", err.Error(), nil)
-		} else {
-			internalError(w, err)
-		}
+		internalError(w, err)
 		return
 	}
 	if plan == nil {

@@ -1,27 +1,80 @@
 package crawler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opensynapse/opensynapse/apps/control-plane/internal/db"
+	"go.yaml.in/yaml/v3"
 )
 
 // OpenAPISpec represents a minimal parsed OpenAPI 3.x or Swagger 2.x document.
 type OpenAPISpec struct {
-	OpenAPI string                        `json:"openapi"`
-	Swagger string                        `json:"swagger"`
-	Info    struct{ Title, Version string } `json:"info"`
-	Paths   map[string]map[string]Operation `json:"paths"`
-	Servers []struct{ URL string }         `json:"servers"`
-	Host    string                         `json:"host"`    // Swagger 2
-	BasePath string                        `json:"basePath"` // Swagger 2
+	OpenAPI  string                          `json:"openapi"`
+	Swagger  string                          `json:"swagger"`
+	Info     struct{ Title, Version string } `json:"info"`
+	Paths    map[string]PathItem             `json:"paths"`
+	Servers  []struct{ URL string }          `json:"servers"`
+	Host     string                          `json:"host"`     // Swagger 2
+	BasePath string                          `json:"basePath"` // Swagger 2
+	Schemes  []string                        `json:"schemes"`  // Swagger 2
+	// Component schemas, for resolving $ref when building example bodies.
+	Components struct {
+		Schemas map[string]json.RawMessage `json:"schemas"`
+	} `json:"components"`
+	Definitions map[string]json.RawMessage `json:"definitions"` // Swagger 2
+}
+
+// PathItem maps lower-case HTTP methods to operations. Path-level
+// parameters are merged into each operation; other path-level keys
+// (summary, servers, $ref…) are ignored.
+type PathItem map[string]Operation
+
+var httpMethods = map[string]bool{"get": true, "put": true, "post": true, "delete": true, "options": true, "head": true, "patch": true, "trace": true}
+
+func (p *PathItem) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var shared []Parameter
+	if r, ok := raw["parameters"]; ok {
+		json.Unmarshal(r, &shared)
+	}
+	item := PathItem{}
+	for key, r := range raw {
+		method := strings.ToLower(key)
+		if !httpMethods[method] {
+			continue
+		}
+		var op Operation
+		if err := json.Unmarshal(r, &op); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+		for _, sp := range shared {
+			overridden := false
+			for _, own := range op.Parameters {
+				if own.Name == sp.Name && own.In == sp.In {
+					overridden = true
+					break
+				}
+			}
+			if !overridden {
+				op.Parameters = append(op.Parameters, sp)
+			}
+		}
+		item[method] = op
+	}
+	*p = item
+	return nil
 }
 
 type Operation struct {
@@ -30,24 +83,41 @@ type Operation struct {
 	Tags        []string    `json:"tags"`
 	Parameters  []Parameter `json:"parameters"`
 	RequestBody *struct {
-		Content map[string]struct {
-			Schema json.RawMessage `json:"schema"`
-		} `json:"content"`
+		Content map[string]MediaType `json:"content"`
 	} `json:"requestBody"`
 }
 
+type MediaType struct {
+	Schema   json.RawMessage `json:"schema"`
+	Example  json.RawMessage `json:"example"`
+	Examples map[string]struct {
+		Value json.RawMessage `json:"value"`
+	} `json:"examples"`
+}
+
 type Parameter struct {
-	Name     string `json:"name"`
-	In       string `json:"in"` // query, path, header
-	Required bool   `json:"required"`
+	Name     string      `json:"name"`
+	In       string      `json:"in"` // query, path, header
+	Required bool        `json:"required"`
+	Example  interface{} `json:"example"`
 	Schema   struct {
-		Type    string `json:"type"`
+		Type    string      `json:"type"`
 		Default interface{} `json:"default"`
 		Example interface{} `json:"example"`
 	} `json:"schema"`
 }
 
-// FetchAndParse fetches an OpenAPI spec from the given URL and parses it.
+// exampleValue returns the parameter's example, if the document gives one.
+func (p Parameter) exampleValue() (string, bool) {
+	for _, v := range []interface{}{p.Example, p.Schema.Example} {
+		if v != nil {
+			return fmt.Sprintf("%v", v), true
+		}
+	}
+	return "", false
+}
+
+// FetchAndParse fetches an OpenAPI spec (JSON or YAML) from the given URL and parses it.
 func FetchAndParse(url string) (*OpenAPISpec, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(url)
@@ -64,17 +134,101 @@ func FetchAndParse(url string) (*OpenAPISpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read openapi body: %w", err)
 	}
+	return ParseSpec(body)
+}
+
+// ParseSpec parses an OpenAPI 3 or Swagger 2 document in JSON or YAML.
+func ParseSpec(body []byte) (*OpenAPISpec, error) {
+	data := bytes.TrimSpace(body)
+	if len(data) > 0 && data[0] != '{' {
+		var doc interface{}
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return nil, fmt.Errorf("parse openapi: the document is neither JSON nor valid YAML: %w", err)
+		}
+		converted, err := json.Marshal(jsonCompatible(doc))
+		if err != nil {
+			return nil, fmt.Errorf("parse openapi: %w", err)
+		}
+		data = converted
+	}
 
 	var spec OpenAPISpec
-	if err := json.Unmarshal(body, &spec); err != nil {
+	if err := json.Unmarshal(data, &spec); err != nil {
 		return nil, fmt.Errorf("parse openapi: %w", err)
 	}
 
-	if spec.Paths == nil || len(spec.Paths) == 0 {
+	if len(spec.Paths) == 0 {
 		return nil, fmt.Errorf("openapi spec has no paths")
 	}
 
 	return &spec, nil
+}
+
+// jsonCompatible turns YAML maps with non-string keys (such as response
+// codes) into maps encoding/json can marshal.
+func jsonCompatible(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, val := range t {
+			t[k] = jsonCompatible(val)
+		}
+		return t
+	case map[interface{}]interface{}:
+		m := make(map[string]interface{}, len(t))
+		for k, val := range t {
+			m[fmt.Sprint(k)] = jsonCompatible(val)
+		}
+		return m
+	case []interface{}:
+		for i, val := range t {
+			t[i] = jsonCompatible(val)
+		}
+		return t
+	default:
+		return v
+	}
+}
+
+// ResolveBaseURL picks the base URL generated requests go to. A server on
+// the host the document was fetched from wins (specs often list both a
+// localhost and an internal address); relative server URLs resolve against
+// the document URL; with no servers, the document's own origin is used.
+func ResolveBaseURL(spec *OpenAPISpec, specURL string) string {
+	doc, err := neturl.Parse(specURL)
+	if err != nil || doc.Host == "" {
+		if len(spec.Servers) > 0 {
+			return strings.TrimRight(spec.Servers[0].URL, "/")
+		}
+		return ""
+	}
+	first := ""
+	for i, s := range spec.Servers {
+		ref, err := neturl.Parse(s.URL)
+		if err != nil {
+			continue
+		}
+		abs := doc.ResolveReference(ref)
+		if i == 0 {
+			first = abs.String()
+		}
+		if abs.Host == doc.Host {
+			return strings.TrimRight(abs.String(), "/")
+		}
+	}
+	if first != "" {
+		return strings.TrimRight(first, "/")
+	}
+	if spec.Swagger != "" {
+		host, scheme := spec.Host, doc.Scheme
+		if host == "" {
+			host = doc.Host
+		}
+		if len(spec.Schemes) > 0 {
+			scheme = spec.Schemes[0]
+		}
+		return strings.TrimRight(scheme+"://"+host+spec.BasePath, "/")
+	}
+	return doc.Scheme + "://" + doc.Host
 }
 
 // GeneratePlanFromOpenAPI creates a test plan from an OpenAPI spec.
@@ -86,11 +240,9 @@ func GeneratePlanFromOpenAPI(spec *OpenAPISpec, baseURL string) *db.Plan {
 
 	// Determine base URL
 	if baseURL == "" {
-		if len(spec.Servers) > 0 {
-			baseURL = spec.Servers[0].URL
-		} else if spec.Host != "" {
-			scheme := "https"
-			baseURL = scheme + "://" + spec.Host + spec.BasePath
+		baseURL = ResolveBaseURL(spec, "")
+		if baseURL == "" && spec.Host != "" {
+			baseURL = "https://" + spec.Host + spec.BasePath
 		}
 	}
 
@@ -130,28 +282,35 @@ func GeneratePlanFromOpenAPI(spec *OpenAPISpec, baseURL string) *db.Plan {
 
 			// Build URL with path params replaced by placeholders
 			url := baseURL + path
-			var headers []map[string]string
+			headers := []map[string]string{}
 
 			for _, param := range op.Parameters {
+				example, hasExample := param.exampleValue()
 				switch param.In {
 				case "path":
-					placeholder := fmt.Sprintf("${%s}", param.Name)
-					url = strings.Replace(url, "{"+param.Name+"}", placeholder, 1)
+					// Without an example, leave a ${name} variable for an environment or extractor to fill.
+					value := fmt.Sprintf("${%s}", param.Name)
+					if hasExample {
+						value = neturl.PathEscape(example)
+					}
+					url = strings.Replace(url, "{"+param.Name+"}", value, 1)
 				case "query":
 					if param.Required {
 						sep := "?"
 						if strings.Contains(url, "?") {
 							sep = "&"
 						}
-						val := "example"
-						if param.Schema.Example != nil {
-							val = fmt.Sprintf("%v", param.Schema.Example)
+						if !hasExample {
+							example = "example"
 						}
-						url += sep + param.Name + "=" + val
+						url += sep + param.Name + "=" + neturl.QueryEscape(example)
 					}
 				case "header":
+					if !hasExample {
+						example = "example"
+					}
 					headers = append(headers, map[string]string{
-						"key": param.Name, "value": "example",
+						"key": param.Name, "value": example,
 					})
 				}
 			}
@@ -162,10 +321,7 @@ func GeneratePlanFromOpenAPI(spec *OpenAPISpec, baseURL string) *db.Plan {
 			if op.RequestBody != nil && (m == "POST" || m == "PUT" || m == "PATCH") {
 				if ct, ok := op.RequestBody.Content["application/json"]; ok {
 					bodyType = "json"
-					bodyContent = string(ct.Schema)
-					if bodyContent == "" {
-						bodyContent = "{}"
-					}
+					bodyContent = spec.exampleBody(ct)
 				}
 			}
 
@@ -180,8 +336,13 @@ func GeneratePlanFromOpenAPI(spec *OpenAPISpec, baseURL string) *db.Plan {
 				Type:    "http",
 				Name:    name,
 				Enabled: true,
-				Properties: json.RawMessage(fmt.Sprintf(`{"method":"%s","url":"%s","headers":%s,"body":%s,"follow_redirects":true}`,
-					m, url, string(headersJSON), string(bodyJSON))),
+				Properties: mustJSON(map[string]interface{}{
+					"method":           m,
+					"url":              url,
+					"headers":          json.RawMessage(headersJSON),
+					"body":             json.RawMessage(bodyJSON),
+					"follow_redirects": true,
+				}),
 				Children: []db.Node{},
 			}
 

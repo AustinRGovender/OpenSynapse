@@ -65,7 +65,7 @@ func TestEnvironmentCRUD(t *testing.T) {
 
 	vars := fetched["variables"].(map[string]interface{})
 	apiKey := vars["API_KEY"].(map[string]interface{})
-	if apiKey["value"] != "***REDACTED***" {
+	if apiKey["value"] != "********" {
 		t.Fatalf("get: expected redacted API_KEY, got %v", apiKey["value"])
 	}
 

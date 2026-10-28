@@ -14,11 +14,11 @@ jobs:
       run:
         working-directory: apps/control-plane
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: '1.22'
+          go-version-file: apps/control-plane/go.mod
 
       - name: Build
         run: go build ./...
@@ -29,20 +29,60 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Test the k6 output extension
+        working-directory: apps/k6-output
+        run: go test ./... -count=1
+
+  go-postgres:
+    name: Go tests on Postgres (cluster-mode database)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/control-plane
+    env:
+      # Every test database becomes a fresh schema in this Postgres.
+      OPENSYNAPSE_TEST_POSTGRES_DSN: postgres://postgres:ci@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/control-plane/go.mod
+
+      - name: Test
+        run: go test ./... -count=1
+
   web:
     name: Web (React SPA)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
 
       - name: Build
         run: pnpm --filter web build
@@ -50,14 +90,51 @@ jobs:
       - name: Lint
         run: pnpm --filter web lint
 
+      - name: Test
+        run: pnpm --filter web test
+
+      # Every component has a story; building them all catches broken ones.
+      - name: Build Storybook
+        run: pnpm --filter web build-storybook
+
+  api-client:
+    name: API client (generated from the OpenAPI document)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/control-plane/go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v6
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Regenerates openapi.json and schema.d.ts and fails if they differ from
+      # what is committed: run `pnpm --filter @opensynapse/api-client generate`.
+      - name: Check for drift
+        run: pnpm --filter @opensynapse/api-client check
+
+      - name: Type-check
+        run: pnpm --filter @opensynapse/api-client typecheck
+
   helm:
     name: Helm (chart validation)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
+
+      - name: Fetch chart dependencies (k6-operator)
+        run: helm dependency update deploy/helm/
 
       - name: Lint chart
         run: helm lint deploy/helm/
@@ -69,13 +146,13 @@ jobs:
     name: Docker (image build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build control-plane image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.control-plane
@@ -95,9 +172,13 @@ jobs:
             echo "::error::k6 binary in control-plane image is missing the xk6-kv extension (see docs/decisions/0007-k6-xk6-kv-bundled-in-control-plane-image.md)"
             exit 1
           }
+          grep -q "opensynapse \[output\]" k6-version.txt || {
+            echo "::error::k6 binary in control-plane image is missing the opensynapse output (see docs/decisions/0012-cluster-mode.md)"
+            exit 1
+          }
 
       - name: Build web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.web

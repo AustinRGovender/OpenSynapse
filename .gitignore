@@ -66,3 +66,6 @@ storybook-static/
 
 # Generated files (keep tracked via explicit add)
 packages/api-client/src/generated.ts
+
+# Helm chart dependencies (helm dependency update deploy/helm)
+deploy/helm/charts/

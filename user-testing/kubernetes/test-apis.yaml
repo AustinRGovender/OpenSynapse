@@ -1,0 +1,65 @@
+# The bundled test APIs, for trying cluster mode (see docs/user/HOW-TO.md).
+# Build and load the images first, e.g. for kind:
+#   docker build -t opensynapse/echo-api:dev user-testing/test-apis/echo-api
+#   docker build -t opensynapse/mock-ecommerce:dev user-testing/test-apis/mock-ecommerce
+#   kind load docker-image opensynapse/echo-api:dev opensynapse/mock-ecommerce:dev --name opensynapse
+# then: kubectl apply -n <namespace> -f user-testing/kubernetes/test-apis.yaml
+# The services keep their Docker Compose names, so the "Test APIs (Docker)"
+# environment works unchanged.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-api
+  labels: {app: echo-api}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: echo-api}
+  template:
+    metadata:
+      labels: {app: echo-api}
+    spec:
+      containers:
+        - name: echo-api
+          image: opensynapse/echo-api:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 9001}]
+          readinessProbe:
+            httpGet: {path: /health, port: 9001}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-api
+spec:
+  selector: {app: echo-api}
+  ports: [{port: 9001, targetPort: 9001}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-ecommerce
+  labels: {app: mock-ecommerce}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: mock-ecommerce}
+  template:
+    metadata:
+      labels: {app: mock-ecommerce}
+    spec:
+      containers:
+        - name: mock-ecommerce
+          image: opensynapse/mock-ecommerce:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 9002}]
+          readinessProbe:
+            httpGet: {path: /health, port: 9002}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-ecommerce
+spec:
+  selector: {app: mock-ecommerce}
+  ports: [{port: 9002, targetPort: 9002}]

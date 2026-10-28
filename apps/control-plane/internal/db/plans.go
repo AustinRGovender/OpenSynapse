@@ -222,9 +222,6 @@ func (s *PlanStore) Update(id string, name, description string, tags []string, r
 	if existing == nil {
 		return nil, nil
 	}
-	if existing.BuiltIn {
-		return nil, fmt.Errorf("cannot modify built-in plan")
-	}
 
 	now := time.Now().UTC()
 	newVersion := existing.Version + 1

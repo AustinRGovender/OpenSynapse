@@ -6,9 +6,18 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "build": "echo 'api-client: no build step yet'",
-    "generate": "echo 'api-client: openapi generation not configured yet'",
-    "test": "echo 'api-client: no tests yet'",
-    "lint": "echo 'api-client: no lint yet'"
+    "generate": "cd ../../apps/control-plane && go run ./cmd/openapi > ../../packages/api-client/openapi.json && cd ../../packages/api-client && openapi-typescript openapi.json -o src/schema.d.ts",
+    "check": "pnpm run generate && git diff --exit-code -- openapi.json src/schema.d.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "~6.0.3"
   }
 }
