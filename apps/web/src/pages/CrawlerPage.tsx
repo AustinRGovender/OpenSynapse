@@ -7,7 +7,7 @@ import { useToast } from '../stores/ui-store'
 import { navigate } from '../utils/navigate'
 
 const ENGINES: Record<CrawlEngine, { label: string; hint: string }> = {
-  colly: { label: 'Colly (fast HTML)', hint: 'Follows links in server-rendered HTML and records form posts. No JavaScript.' },
+  colly: { label: 'Colly (fast HTML)', hint: 'Follows links in server-rendered HTML. Fast, but runs no JavaScript, so links a script adds are missed.' },
   rod: { label: 'Rod (headless Chromium)', hint: 'Runs a real browser, so single-page apps work. Needs Chromium on the server (bundled in the Docker image).' },
   zap: { label: 'OWASP ZAP spider', hint: 'Uses a running ZAP daemon (ZAP_API_URL, default http://zap:8080).' },
 }

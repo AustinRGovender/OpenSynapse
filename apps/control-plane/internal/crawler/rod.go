@@ -3,6 +3,7 @@ package crawler
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,14 @@ func (e *RodEngine) Crawl(ctx context.Context, cfg CrawlConfig, onProgress Progr
 		return db.CrawlGraph{}, nil, fmt.Errorf("launch browser: %w", err)
 	}
 	defer cleanup()
+
+	// Chrome drops session cookies, such as a form login's, when its last tab
+	// closes; this blank tab keeps the session open between pages.
+	keepAlive, err := browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	if err != nil {
+		return db.CrawlGraph{}, nil, fmt.Errorf("open browser tab: %w", err)
+	}
+	defer keepAlive.Close()
 
 	var mu sync.Mutex
 	var nodes []db.CrawlGraphNode
@@ -150,28 +159,41 @@ func (e *RodEngine) visitPage(browser *rod.Browser, ctx context.Context, cfg Cra
 	// Track request methods by request ID
 	methodMap := &sync.Map{}
 
+	record := func(requestID proto.NetworkRequestID, resp *proto.NetworkResponse) {
+		// The browser fetches /favicon.ico on its own; it isn't the site's traffic.
+		if u, err := url.Parse(resp.URL); err == nil && u.Path == "/favicon.ico" {
+			return
+		}
+		method := "GET"
+		if m, ok := methodMap.Load(string(requestID)); ok {
+			method = m.(string)
+		}
+		headers := make(map[string]string)
+		for k, v := range resp.Headers {
+			headers[k] = fmt.Sprintf("%v", v)
+		}
+		mu.Lock()
+		captured = append(captured, db.CapturedRequest{
+			Method:     strings.ToUpper(method),
+			URL:        resp.URL,
+			StatusCode: resp.Status,
+			Headers:    headers,
+		})
+		mu.Unlock()
+	}
+
 	// Listen for network events
 	go page.EachEvent(
 		func(ev *proto.NetworkRequestWillBeSent) {
+			// A redirect (such as the 303 after a form post) gets no
+			// ResponseReceived; it arrives with the request that follows it.
+			if ev.RedirectResponse != nil {
+				record(ev.RequestID, ev.RedirectResponse)
+			}
 			methodMap.Store(string(ev.RequestID), ev.Request.Method)
 		},
 		func(ev *proto.NetworkResponseReceived) {
-			method := "GET"
-			if m, ok := methodMap.Load(string(ev.RequestID)); ok {
-				method = m.(string)
-			}
-			headers := make(map[string]string)
-			for k, v := range ev.Response.Headers {
-				headers[k] = fmt.Sprintf("%v", v)
-			}
-			mu.Lock()
-			captured = append(captured, db.CapturedRequest{
-				Method:     strings.ToUpper(method),
-				URL:        ev.Response.URL,
-				StatusCode: ev.Response.Status,
-				Headers:    headers,
-			})
-			mu.Unlock()
+			record(ev.RequestID, ev.Response)
 		},
 	)()
 
@@ -244,22 +266,22 @@ func rodFormLogin(page *rod.Page, cfg CrawlConfig) {
 		"button[type='submit']", "input[type='submit']",
 	}
 
-	for _, sel := range usernameSelectors {
-		if el, err := page.Element(sel); err == nil && el != nil {
-			el.Input(cfg.Auth.Username)
-			break
+	// Has looks once; Element would wait for a missing field indefinitely.
+	first := func(selectors []string) *rod.Element {
+		for _, sel := range selectors {
+			if ok, el, err := page.Has(sel); err == nil && ok {
+				return el
+			}
 		}
+		return nil
 	}
-	for _, sel := range passwordSelectors {
-		if el, err := page.Element(sel); err == nil && el != nil {
-			el.Input(cfg.Auth.Password)
-			break
-		}
+	if el := first(usernameSelectors); el != nil {
+		el.Input(cfg.Auth.Username)
 	}
-	for _, sel := range submitSelectors {
-		if el, err := page.Element(sel); err == nil && el != nil {
-			el.Click(proto.InputMouseButtonLeft, 1)
-			break
-		}
+	if el := first(passwordSelectors); el != nil {
+		el.Input(cfg.Auth.Password)
+	}
+	if el := first(submitSelectors); el != nil {
+		el.Click(proto.InputMouseButtonLeft, 1)
 	}
 }
