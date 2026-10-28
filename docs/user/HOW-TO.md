@@ -320,18 +320,47 @@ The Crawler drafts a plan for you, two ways:
   Every operation becomes a request, using the document's examples for path parameters
   and request bodies.
 - **Crawl a website** — enter a start URL and choose an engine: **Colly** (fast, for
-  server-rendered HTML), **Rod** (a real headless browser, for single-page apps) or
-  **OWASP ZAP** (uses a ZAP daemon). Set the link depth, a request limit, URL parts to
-  skip (logout and delete links are skipped by default) and, if needed, Basic, Bearer or
-  form-login authentication.
+  server-rendered HTML; runs no JavaScript), **Rod** (a real headless browser, so links a
+  script adds are found too, along with the page's background API calls) or **OWASP ZAP**
+  (uses a ZAP daemon). Set the link depth (how many links to follow from the start page),
+  a request limit, URL parts to skip (logout and delete links are skipped by default) and,
+  if needed, Basic, Bearer or form-login authentication.
 
 ![An imported OpenAPI document](images/17-crawler.png)
 
 Click **Generate plan** to create the draft and open it in the builder. Review it before
 running at load — add think times, test data and assertions.
 
-To try it: import `http://mock-ecommerce:9002/openapi.yaml` (the test shop's own
-description).
+**Form login** signs in through the form on the start page, so make the start URL the
+login page. The crawler fills the form's password field and its username or email field,
+keeps any hidden fields (such as a CSRF token), submits it, and then crawls as the
+signed-in user. Colly stops with an error if the form rejects the sign-in. Rod carries on
+signed out; its recorded `POST` shows the form's answer (for example 401), so if no
+account pages appear, check the credentials.
+
+Passwords and tokens are used only while the crawl runs; they are not saved with it. A
+recorded sign-in request (Rod records the form's `POST`) therefore has no form fields in
+the generated plan: add them in the builder, ideally from an environment secret.
+
+### To try it
+
+The test shop at `http://mock-ecommerce:9002/shop` (section 15) is built for this. The
+default depth (3) and skip list are fine for every row.
+
+| Start URL | Engine and authentication | What the crawl should find |
+| --- | --- | --- |
+| `http://mock-ecommerce:9002/openapi.yaml` | **Import OpenAPI** | 6 operations. The other APIs work too: `echo-api:9001`, `slow-api:9003`, `error-api:9004` |
+| `http://mock-ecommerce:9002/shop` | Colly, none | 12 pages: home, products (both pages), products p1–p4, cart, about, deals, both login pages |
+| `http://mock-ecommerce:9002/shop` | Rod, none | The same, plus the four `/shop/deals/…` pages the deals page builds with JavaScript and its `GET /products` call |
+| `http://mock-ecommerce:9002/shop/login` | Colly or Rod, Form login `demo` / `demo-pass` | The above plus `/shop/account`, `/shop/account/orders` and `/shop/account/settings`; Rod also records `POST /shop/login` |
+| `http://mock-ecommerce:9002/shop/login-email` | Colly or Rod, Form login `demo@example.com` / `demo-pass` | The same; Rod also records `POST /shop/login-email` |
+| `http://mock-ecommerce:9002/shop/staff` | Colly or Rod, Basic `demo` / `demo-pass` | `/shop/staff` and `/shop/staff/reports` as well as the public pages |
+
+No crawl should visit `/shop/logout` or `/shop/account/delete` (the default skip list) or
+`https://example.com/partner` (another site). Without Basic auth, `/shop/staff` answers
+401 and is left out. Try a wrong password with Colly to see the sign-in error. The ZAP
+engine needs a ZAP daemon on the same Docker network as the shop, which the test-API
+Compose file does not start.
 
 ## 12. Settings
 
@@ -424,9 +453,11 @@ the port.
 | Service | Variable | Endpoints |
 | --- | --- | --- |
 | `echo-api:9001` | `ECHO_API` | `GET /health` · `POST /echo` (returns what you send) · `GET /delay/{ms}` · `GET /status/{code}` |
-| `mock-ecommerce:9002` | `ECOMMERCE_API` | `GET /products` · `GET /products/{id}` (p1–p4) · `POST /orders` `{"product_ids":["p1"]}` · `GET /orders/latest` · `GET /orders/{id}` · `GET /openapi.yaml` |
+| `mock-ecommerce:9002` | `ECOMMERCE_API` | `GET /products` · `GET /products/{id}` (p1–p4) · `POST /orders` `{"product_ids":["p1"]}` · `GET /orders/latest` · `GET /orders/{id}` · `GET /shop` (an HTML storefront for the Crawler; see section 11) |
 | `slow-api:9003` | `SLOW_API` | `GET /slow/{seconds}` · `GET /timeout` · `GET /flaky` |
 | `error-api:9004` | `ERROR_API` | `GET /random-error` · `GET /rate-limit` · `GET /degradation` |
+
+Every API serves its OpenAPI document at `/openapi.yaml`, for the Crawler's import.
 
 The echo API also has endpoints for trying every Playground auth method:
 
