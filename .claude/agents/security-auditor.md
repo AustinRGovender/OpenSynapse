@@ -17,7 +17,7 @@ Run `git diff --cached` to see staged changes, or `git diff` for all uncommitted
 
 ## Checks
 
-1. **Hardcoded secrets**: Look for high-entropy strings, API key prefixes (sk-, AKIA, ghp_, gho_, glpat-, xox), and passwords in variable assignments.
+1. **Hardcoded secrets**: Look for high-entropy strings, API key prefixes (sk-, nvapi-, AKIA, ghp_, gho_, glpat-, xox), and passwords in variable assignments.
 
 2. **Forbidden files**: `.env`, `.key`, `.pem`, `creds*` files must never be committed.
 

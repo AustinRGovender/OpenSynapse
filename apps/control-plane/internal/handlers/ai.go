@@ -79,7 +79,7 @@ func (h *AIHandlers) TestConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, err := ai.GetProvider(config.Provider)
+	provider, err := ai.GetProvider(config.Provider, config.AzureEndpoint)
 	if err != nil {
 		badRequest(w, "AI_INVALID_PROVIDER", err.Error(), nil)
 		return
@@ -208,7 +208,7 @@ func (h *AIHandlers) Analyse(w http.ResponseWriter, r *http.Request) {
 
 	// Get provider and key
 	key, _ := h.aiStore.GetRawKey()
-	provider, err := ai.GetProvider(config.Provider)
+	provider, err := ai.GetProvider(config.Provider, config.AzureEndpoint)
 	if err != nil {
 		internalError(w, err)
 		return

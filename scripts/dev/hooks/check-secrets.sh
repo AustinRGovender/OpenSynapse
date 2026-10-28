@@ -7,6 +7,7 @@ SECRET_PATTERNS=(
   'AKIA[0-9A-Z]{16}'                    # AWS Access Key
   'sk-[a-zA-Z0-9]{20,}'                 # OpenAI / Stripe secret key
   'sk-ant-[a-zA-Z0-9-]{20,}'            # Anthropic API key
+  'nvapi-[a-zA-Z0-9_-]{20,}'            # NVIDIA API key
   'ghp_[a-zA-Z0-9]{36}'                 # GitHub personal access token
   'gho_[a-zA-Z0-9]{36}'                 # GitHub OAuth token
   'glpat-[a-zA-Z0-9\-]{20,}'            # GitLab personal access token

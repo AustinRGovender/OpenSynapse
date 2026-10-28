@@ -18,7 +18,7 @@ a running system, not just unit-tested.
 | 5 | Reports, history, comparison | complete | 2026-10-28 | Welch's t-test comparison; JSON, CSV, HTML and PDF exports. |
 | 6 | Endpoint playground | complete | 2026-10-28 | Seven auth methods incl. OAuth 2.0 popup and client credentials, collections, micro-tests, add to plan. |
 | 7 | Crawler | complete | 2026-10-28 | OpenAPI import (JSON and YAML, examples) of all four test APIs; Colly/Rod/ZAP crawls. Colly and Rod verified against the test shop (`/shop`), including form login and Basic auth. |
-| 8 | AI analysis | complete | 2026-10-28 | Opt-in, user keys, prompt preview, rate limit and spend cap. Not exercised against a live provider (needs a real key). |
+| 8 | AI analysis | complete | 2026-10-28 | Opt-in, user keys, prompt preview, rate limit and spend cap. Providers: OpenAI, Anthropic, Azure OpenAI, NVIDIA NIM (ADR-0013). Not exercised against a live provider (needs a real key). |
 | 9 | Fragments and template gallery | complete | 2026-10-28 | |
 | 10 | Cluster mode and distributed execution | complete | 2026-10-28 | Verified on kind (Kubernetes 1.34): 1 vs 4 workers within 0.6%, live control reaches all workers in 2 s, 30,780 req/s recorded exactly. Team mode and roles. See ADR-0012. |
 | 11 | JMeter import, Docker polish, release engineering | partial | 2026-10-28 | JMeter import, Docker Compose and quick-start, README and how-to guide done. Not done: signed desktop installers and auto-update, multi-arch/cosign-signed images, a published Helm chart repository; the release workflow has not been run. |

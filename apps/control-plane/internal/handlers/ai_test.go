@@ -56,6 +56,32 @@ func TestAIUpdateConfig(t *testing.T) {
 	}
 }
 
+func TestAIUpdateConfigNIM(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	body := `{"provider":"nvidia_nim","api_key":"nvapi-test-key-wxyz","model":"z-ai/glm-5.3-flash","enabled":true}`
+	req, _ := http.NewRequest("PUT", ts.URL()+"/api/v1/ai/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := ts.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update config: expected 200, got %d", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest("GET", ts.URL()+"/api/v1/ai/config", nil)
+	resp = ts.Do(req)
+	var config map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&config)
+	resp.Body.Close()
+
+	if config["provider"] != "nvidia_nim" || config["model"] != "z-ai/glm-5.3-flash" {
+		t.Fatalf("expected the NIM provider and model back, got %v", config)
+	}
+	if config["api_key_masked"] != "****wxyz" {
+		t.Fatalf("expected masked key '****wxyz', got %v", config["api_key_masked"])
+	}
+}
+
 func TestAIKeyMasking(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 

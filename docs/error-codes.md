@@ -70,7 +70,7 @@ Every error from the OpenSynapse API has the same shape:
 | Code | HTTP | Meaning |
 | --- | --- | --- |
 | `AI_NOT_CONFIGURED`, `AI_NOT_ENABLED`, `AI_NO_KEY` | 400 | Set up a provider and key under Settings › AI and enable it. |
-| `AI_INVALID_PROVIDER` | 400 | Provider must be `openai`, `anthropic` or `azure_openai`. |
+| `AI_INVALID_PROVIDER` | 400 | Provider must be `openai`, `anthropic`, `azure_openai` or `nvidia_nim`. |
 | `AI_CAP_EXCEEDED` | 400 | This month's spending cap is reached. |
 | `AI_RATE_LIMITED` | 429 | More than 20 analyses in an hour. |
 | `AI_REQUEST_FAILED` | 502 | The AI provider returned an error. |

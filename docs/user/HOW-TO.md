@@ -381,9 +381,10 @@ Click **Save** after changing a tab.
 
 ### AI analysis (optional)
 
-AI is off until you turn it on. Choose a provider (OpenAI, Anthropic or Azure OpenAI),
-paste **your own** API key, pick a model and optionally a monthly spending cap. Keys are
-encrypted at rest.
+AI is off until you turn it on. Choose a provider (OpenAI, Anthropic, Azure OpenAI or
+NVIDIA NIM), paste **your own** API key, pick a model and optionally a monthly spending
+cap. Keys are encrypted at rest. For NVIDIA NIM, create a key (`nvapi-…`) on
+build.nvidia.com and use a model ID from its catalog, such as `z-ai/glm-5.3-flash`.
 
 ![AI settings](images/19-settings-ai.png)
 

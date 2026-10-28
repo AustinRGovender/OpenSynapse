@@ -2,19 +2,21 @@ import { create } from 'zustand'
 import type { AIAnalysis, AIConfig } from '@opensynapse/api-client'
 import { api, errorMessage, unwrap } from '../api'
 
-export type AIProvider = '' | 'openai' | 'anthropic' | 'azure_openai'
+export type AIProvider = '' | 'openai' | 'anthropic' | 'azure_openai' | 'nvidia_nim'
 
 /** Sensible defaults per provider; any model name can be typed instead. */
 export const MODEL_OPTIONS: Record<string, string[]> = {
   openai: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o'],
   anthropic: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
   azure_openai: [],
+  nvidia_nim: ['z-ai/glm-5.3-flash', 'nvidia/nemotron-3-super-120b-a12b', 'deepseek-ai/deepseek-v4.1-flash', 'openai/gpt-oss-20b'],
 }
 
 export const PROVIDER_LABELS: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   azure_openai: 'Azure OpenAI',
+  nvidia_nim: 'NVIDIA NIM',
 }
 
 /** The standard questions from F-09. */
